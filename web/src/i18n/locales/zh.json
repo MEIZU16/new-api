@@ -3253,7 +3253,6 @@
     "Output aspect ratio; defaults to 1:1 and this model is fixed at 2K resolution": "输出宽高比；默认为 1:1，此模型的分辨率固定为 2K",
     "Output aspect ratio; defaults to 1:1 and this model is fixed at 4K resolution": "输出宽高比；默认为 1:1，此模型的分辨率固定为 4K",
     "Exactly one image is generated per request": "每次请求仅生成一张图片",
-    "How to deliver the resulting image; b64_json is the default": "图像结果的返回方式；默认为 b64_json",
     "Output video size": "输出视频尺寸",
     "Output image size": "输出图像尺寸",
     "Output price": "输出价格",

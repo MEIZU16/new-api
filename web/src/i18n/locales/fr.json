@@ -3253,7 +3253,6 @@
     "Output aspect ratio; defaults to 1:1 and this model is fixed at 2K resolution": "Format de sortie ; 1:1 par défaut, avec une résolution fixe de 2K pour ce modèle",
     "Output aspect ratio; defaults to 1:1 and this model is fixed at 4K resolution": "Format de sortie ; 1:1 par défaut, avec une résolution fixe de 4K pour ce modèle",
     "Exactly one image is generated per request": "Une seule image est générée par requête",
-    "How to deliver the resulting image; b64_json is the default": "Mode de retour de l’image générée ; b64_json par défaut",
     "Output video size": "Dimensions de la vidéo de sortie",
     "Output image size": "Taille de l'image de sortie",
     "Output price": "Prix de sortie",

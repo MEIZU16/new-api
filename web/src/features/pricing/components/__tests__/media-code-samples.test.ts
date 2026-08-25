@@ -48,10 +48,13 @@ describe('media API code samples', () => {
       expect(sample).toContain('extra_fields')
       expect(sample).toContain('aspect_ratio')
       expect(sample).toContain('16:9')
-      expect(sample).toContain('b64_json')
       expect(sample).toContain('n')
+      expect(sample).not.toContain('response_format')
       expect(sample).not.toContain('1024x1024')
       expect(sample).not.toContain('style')
+      if (language !== 'curl') {
+        expect(sample).toContain('b64_json')
+      }
     }
   )
 

@@ -725,13 +725,6 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
       defaultValue: 1,
       descriptionKey: 'Exactly one image is generated per request',
     },
-    {
-      name: 'response_format',
-      type: 'enum',
-      enumValues: ['b64_json', 'url'],
-      descriptionKey:
-        'How to deliver the resulting image; b64_json is the default',
-    },
   ]
 }
 

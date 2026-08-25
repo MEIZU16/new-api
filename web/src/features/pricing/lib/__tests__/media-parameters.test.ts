@@ -52,7 +52,6 @@ describe('media API supported parameters', () => {
         'prompt',
         'extra_fields.aspect_ratio',
         'n',
-        'response_format',
       ])
       expect(parameters[1]?.enumValues).toEqual([
         '1:1',
