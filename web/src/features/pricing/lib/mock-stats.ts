@@ -18,6 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '../types'
 import {
+  MEDIA_IMAGE_ASPECT_RATIOS,
+  mediaImageResolution,
+  type MediaImageResolution,
+} from './media-docs'
+import {
   hashStringToSeed,
   randomInRange,
   randomIntInRange,
@@ -315,8 +320,7 @@ export function buildGroupPerformance(model: PricingModel): GroupPerformance[] {
   const spec = PROFILE_SPECS[profile]
   const baseSeed = hashStringToSeed(model.model_name)
 
-  return targets
-    .slice()
+  return [...targets]
     .sort((a, b) => a.localeCompare(b))
     .map<GroupPerformance>((group) => {
       const rand = seededRandom(baseSeed ^ hashStringToSeed(group))
@@ -690,49 +694,46 @@ const EMBEDDING_PARAMS: SupportedParameter[] = [
   },
 ]
 
-const IMAGE_PARAMS: SupportedParameter[] = [
-  {
-    name: 'prompt',
-    type: 'string',
-    required: true,
-    descriptionKey: 'Text description of the desired image',
-  },
-  {
-    name: 'size',
-    type: 'enum',
-    enumValues: ['256x256', '512x512', '1024x1024', '1024x1792', '1792x1024'],
-    defaultValue: '1024x1024',
-    descriptionKey: 'Output image size',
-  },
-  {
-    name: 'quality',
-    type: 'enum',
-    enumValues: ['standard', 'hd'],
-    defaultValue: 'standard',
-    descriptionKey: 'Generation quality preset',
-  },
-  {
-    name: 'style',
-    type: 'enum',
-    enumValues: ['vivid', 'natural'],
-    defaultValue: 'vivid',
-    descriptionKey: 'Aesthetic style',
-  },
-  {
-    name: 'n',
-    type: 'integer',
-    defaultValue: 1,
-    range: '1 ~ 10',
-    descriptionKey: 'Number of images to generate',
-  },
-  {
-    name: 'response_format',
-    type: 'enum',
-    enumValues: ['url', 'b64_json'],
-    defaultValue: 'url',
-    descriptionKey: 'How to deliver the resulting image',
-  },
-]
+const IMAGE_ASPECT_RATIO_DESCRIPTIONS: Record<MediaImageResolution, string> = {
+  '1K': 'Output aspect ratio; defaults to 1:1 and this model is fixed at 1K resolution',
+  '2K': 'Output aspect ratio; defaults to 1:1 and this model is fixed at 2K resolution',
+  '4K': 'Output aspect ratio; defaults to 1:1 and this model is fixed at 4K resolution',
+}
+
+function buildImageParameters(model: PricingModel): SupportedParameter[] {
+  const resolution = mediaImageResolution(model.model_name)
+  const aspectRatioDescription = resolution
+    ? IMAGE_ASPECT_RATIO_DESCRIPTIONS[resolution]
+    : 'Output aspect ratio; defaults to 1:1'
+
+  return [
+    {
+      name: 'prompt',
+      type: 'string',
+      required: true,
+      descriptionKey: 'Text description of the desired image',
+    },
+    {
+      name: 'extra_fields.aspect_ratio',
+      type: 'enum',
+      enumValues: [...MEDIA_IMAGE_ASPECT_RATIOS],
+      descriptionKey: aspectRatioDescription,
+    },
+    {
+      name: 'n',
+      type: 'integer',
+      defaultValue: 1,
+      descriptionKey: 'Exactly one image is generated per request',
+    },
+    {
+      name: 'response_format',
+      type: 'enum',
+      enumValues: ['b64_json', 'url'],
+      descriptionKey:
+        'How to deliver the resulting image; b64_json is the default',
+    },
+  ]
+}
 
 const VIDEO_PARAMS: SupportedParameter[] = [
   {
@@ -742,36 +743,31 @@ const VIDEO_PARAMS: SupportedParameter[] = [
     descriptionKey: 'Text description of the desired video',
   },
   {
-    name: 'duration',
-    type: 'integer',
-    range: '1 ~ 60',
+    name: 'seconds',
+    type: 'enum',
+    enumValues: ['4', '6', '8', '10'],
     descriptionKey: 'Video length in seconds',
   },
   {
-    name: 'aspect_ratio',
+    name: 'size',
     type: 'enum',
-    enumValues: ['16:9', '9:16', '1:1'],
-    defaultValue: '16:9',
-    descriptionKey: 'Output aspect ratio',
-  },
-  {
-    name: 'fps',
-    type: 'integer',
-    range: '8 ~ 60',
-    defaultValue: 24,
-    descriptionKey: 'Frames per second',
+    enumValues: ['1280x720', '720x1280'],
+    descriptionKey: 'Output video size',
   },
 ]
 
 type ApiCategory = 'reasoning' | 'embedding' | 'image' | 'video' | 'chat'
 
 /**
- * Refine the broad PROFILE_BY_NAME bucket into an API-shape category. The
- * `image` bucket from `PROFILE_BY_NAME` lumps still-image and video models
- * together (because their performance profiles overlap); for the API tab we
- * need to distinguish them so the request-parameter table is accurate.
+ * Prefer endpoint metadata because custom model names need not identify their
+ * modality. Fall back to the historical name profile for catalogs that do not
+ * yet provide supported_endpoint_types.
  */
 function apiCategoryOf(model: PricingModel): ApiCategory {
+  const endpointTypes = model.supported_endpoint_types ?? []
+  if (endpointTypes.includes('openai-video')) return 'video'
+  if (endpointTypes.includes('image-generation')) return 'image'
+
   const profile = PROFILE_BY_NAME(model.model_name)
   if (profile === 'embedding' || profile === 'reasoning') return profile
   if (profile === 'image') {
@@ -793,7 +789,7 @@ export function buildSupportedParameters(
   const cat = apiCategoryOf(model)
   if (cat === 'reasoning') return REASONING_PARAMS
   if (cat === 'embedding') return EMBEDDING_PARAMS
-  if (cat === 'image') return IMAGE_PARAMS
+  if (cat === 'image') return buildImageParameters(model)
   if (cat === 'video') return VIDEO_PARAMS
   return COMMON_CHAT_PARAMS
 }
@@ -813,12 +809,20 @@ export function buildRateLimits(model: PricingModel): RateLimit[] {
   const baseSeed = hashStringToSeed(`${model.model_name}:rl`)
   const isHeavy = cat === 'image' || cat === 'video'
   const isLight = cat === 'embedding'
-  const baseRpm = isHeavy ? 60 : isLight ? 5_000 : 500
-  const baseTpm = isHeavy ? 0 : isLight ? 1_000_000 : 200_000
-  const baseRpd = isHeavy ? 1_000 : isLight ? 100_000 : 10_000
+  let baseRpm = 500
+  let baseTpm = 200_000
+  let baseRpd = 10_000
+  if (isHeavy) {
+    baseRpm = 60
+    baseTpm = 0
+    baseRpd = 1_000
+  } else if (isLight) {
+    baseRpm = 5_000
+    baseTpm = 1_000_000
+    baseRpd = 100_000
+  }
 
-  return targets
-    .slice()
+  return [...targets]
     .sort((a, b) => a.localeCompare(b))
     .map((group) => {
       const rand = seededRandom(baseSeed ^ hashStringToSeed(group))
@@ -836,7 +840,8 @@ export function buildRateLimits(model: PricingModel): RateLimit[] {
 export function formatRateLimit(value: number): string {
   if (value <= 0) return '—'
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000)
+  if (value >= 1_000) {
     return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
+  }
   return value.toLocaleString()
 }
