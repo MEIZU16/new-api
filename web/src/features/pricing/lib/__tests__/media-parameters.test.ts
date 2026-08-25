@@ -65,13 +65,10 @@ describe('media API supported parameters', () => {
       expect(parameters.map((parameter) => parameter.name)).toEqual([
         'prompt',
         'extra_fields.aspect_ratio',
-        'n',
       ])
       expect(parameters[1]?.type).toBe('enum')
       expect(parameters[1]?.enumValues).toEqual(aspectRatios)
       expect(parameters[1]?.descriptionKey).toContain(resolution)
-      expect(parameters[2]?.defaultValue).toBe(1)
-      expect(parameters[2]?.range).toBeUndefined()
       expect(parameters.some((parameter) => parameter.name === 'style')).toBe(
         false
       )

@@ -39,7 +39,6 @@ export function buildImageSample(
     {
       model: ctx.modelName,
       prompt,
-      n: 1,
       extra_fields: { aspect_ratio: '16:9' },
     },
     null,
@@ -66,7 +65,6 @@ export function buildImageSample(
       'response = client.images.generate(',
       `    model="${ctx.modelName}",`,
       `    prompt="${prompt}",`,
-      '    n=1,',
       '    extra_body={',
       '        "extra_fields": {"aspect_ratio": "16:9"},',
       '    },',

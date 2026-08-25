@@ -720,12 +720,6 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
       enumValues: aspectRatios ? [...aspectRatios] : undefined,
       descriptionKey: aspectRatioDescription,
     },
-    {
-      name: 'n',
-      type: 'integer',
-      defaultValue: 1,
-      descriptionKey: 'Exactly one image is generated per request',
-    },
   ]
 }
 
