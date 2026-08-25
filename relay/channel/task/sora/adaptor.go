@@ -365,5 +365,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
 		return nil, errors.Wrap(err, "set id failed")
 	}
+	// Polling responses are reconstructed from the persisted upstream payload,
+	// so restore the public SKU just as the creation response does.
+	if publicModel := strings.TrimSpace(task.Properties.OriginModelName); publicModel != "" {
+		if data, err = sjson.SetBytes(data, "model", publicModel); err != nil {
+			return nil, errors.Wrap(err, "set model failed")
+		}
+	}
 	return data, nil
 }

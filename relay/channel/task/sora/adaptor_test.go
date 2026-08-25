@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -136,5 +137,23 @@ func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.Equal(t, "task_public", response.ID)
 	assert.Equal(t, "task_public", response.TaskID)
+	assert.Equal(t, "flow-omni", response.Model)
+}
+
+func TestSoraPollingRestoresThePublicModelName(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task_public",
+		Properties: model.Properties{
+			OriginModelName: "flow-omni",
+		},
+		Data: json.RawMessage(`{"id":"video_internal","object":"video","model":"flow/omni","status":"completed"}`),
+	}
+
+	data, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var response responseTask
+	require.NoError(t, json.Unmarshal(data, &response))
+	assert.Equal(t, "task_public", response.ID)
 	assert.Equal(t, "flow-omni", response.Model)
 }
