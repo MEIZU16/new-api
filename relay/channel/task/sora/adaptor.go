@@ -88,10 +88,42 @@ func validateRemixRequest(c *gin.Context) *dto.TaskError {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	if info.Action == constant.TaskActionRemix {
+	if info.TaskRelayInfo != nil && info.Action == constant.TaskActionRemix {
 		return validateRemixRequest(c)
 	}
-	return relaycommon.ValidateMultipartDirect(c, info)
+	if taskErr := relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
+		return taskErr
+	}
+	// Billing, persisted task metadata, and the upstream body must use one
+	// resolved default. Previously billing assumed portrait while the raw body
+	// omitted size and let a2a generate landscape.
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	req.Size = resolvedSoraSize(req)
+	req.Seconds = strconv.Itoa(resolvedSoraSeconds(req))
+	req.Duration = 0
+	c.Set("task_request", req)
+	return nil
+}
+
+func resolvedSoraSeconds(req relaycommon.TaskSubmitReq) int {
+	seconds, _ := strconv.Atoi(req.Seconds)
+	if seconds == 0 {
+		seconds = req.Duration
+	}
+	if seconds <= 0 {
+		return 4
+	}
+	return seconds
+}
+
+func resolvedSoraSize(req relaycommon.TaskSubmitReq) string {
+	if strings.TrimSpace(req.Size) == "" {
+		return "720x1280"
+	}
+	return req.Size
 }
 
 // EstimateBilling 根据用户请求的 seconds 和 size 计算 OtherRatios。
@@ -106,18 +138,8 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		return nil
 	}
 
-	seconds, _ := strconv.Atoi(req.Seconds)
-	if seconds == 0 {
-		seconds = req.Duration
-	}
-	if seconds <= 0 {
-		seconds = 4
-	}
-
-	size := req.Size
-	if size == "" {
-		size = "720x1280"
-	}
+	seconds := resolvedSoraSeconds(req)
+	size := resolvedSoraSize(req)
 
 	ratios := map[string]float64{
 		"seconds": float64(seconds),
@@ -153,11 +175,19 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, errors.Wrap(err, "read_body_bytes_failed")
 	}
 	contentType := c.GetHeader("Content-Type")
+	taskReq, taskReqErr := relaycommon.GetTaskRequest(c)
+	isRemix := info.TaskRelayInfo != nil && info.Action == constant.TaskActionRemix
+	applyDefaults := !isRemix && taskReqErr == nil
 
 	if strings.HasPrefix(contentType, "application/json") {
 		var bodyMap map[string]interface{}
 		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
 			bodyMap["model"] = info.UpstreamModelName
+			if applyDefaults {
+				bodyMap["size"] = resolvedSoraSize(taskReq)
+				bodyMap["seconds"] = strconv.Itoa(resolvedSoraSeconds(taskReq))
+				delete(bodyMap, "duration")
+			}
 			if newBody, err := common.Marshal(bodyMap); err == nil {
 				return bytes.NewReader(newBody), nil
 			}
@@ -173,8 +203,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		var buf bytes.Buffer
 		writer := multipart.NewWriter(&buf)
 		writer.WriteField("model", info.UpstreamModelName)
+		if applyDefaults {
+			writer.WriteField("size", resolvedSoraSize(taskReq))
+			writer.WriteField("seconds", strconv.Itoa(resolvedSoraSeconds(taskReq)))
+		}
 		for key, values := range formData.Value {
-			if key == "model" {
+			if key == "model" || (applyDefaults && (key == "size" || key == "seconds" || key == "duration")) {
 				continue
 			}
 			for _, v := range values {
@@ -249,9 +283,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	// 使用公开 task_xxxx ID 返回给客户端
+	// 使用公开 task_xxxx ID 和公开模型名返回给客户端。上游模型名
+	// 属于渠道路由细节，不应泄露或替代用户实际请求的 SKU。
 	dResp.ID = info.PublicTaskID
 	dResp.TaskID = info.PublicTaskID
+	if info.OriginModelName != "" {
+		dResp.Model = info.OriginModelName
+	}
 	c.JSON(http.StatusOK, dResp)
 	return upstreamID, responseBody, nil
 }

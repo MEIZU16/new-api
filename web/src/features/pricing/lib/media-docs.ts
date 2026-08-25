@@ -16,20 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export const MEDIA_IMAGE_ASPECT_RATIOS = [
-  '1:1',
-  '16:9',
-  '9:16',
-  '4:3',
-  '3:4',
-  '3:2',
-  '2:3',
-] as const
-
 export type MediaImageResolution = '1K' | '2K' | '4K'
 
 const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
+
+const PRO_IMAGE_ASPECT_RATIOS = [
+  '1:1',
+  '9:16',
+  '16:9',
+  '3:4',
+  '4:3',
+  '3:2',
+  '2:3',
+  '5:4',
+  '4:5',
+  '21:9',
+] as const
+
+const FLASH_IMAGE_ASPECT_RATIOS = [
+  ...PRO_IMAGE_ASPECT_RATIOS,
+  '4:1',
+  '1:4',
+  '8:1',
+  '1:8',
+] as const
 
 /** Return the resolution tier encoded in one of this service's image SKUs. */
 export function mediaImageResolution(
@@ -39,4 +50,16 @@ export function mediaImageResolution(
   if (/-4k$/i.test(modelName)) return '4K'
   if (/-2k$/i.test(modelName)) return '2K'
   return '1K'
+}
+
+/** Ratios currently offered by each model's AI Studio web control. */
+export function mediaImageAspectRatios(
+  modelName: string
+): readonly string[] | null {
+  const baseModel = modelName.toLowerCase().replace(/-(?:2k|4k)$/, '')
+  if (baseModel === 'gemini-3-pro-image') return PRO_IMAGE_ASPECT_RATIOS
+  if (baseModel === 'gemini-3.1-flash-image') {
+    return FLASH_IMAGE_ASPECT_RATIOS
+  }
+  return null
 }

@@ -2,9 +2,13 @@ package sora
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -38,4 +42,99 @@ func TestSoraBuildRequestBodyReturnsReplayablePassThroughBody(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, replayBody.Close())
 	assert.Equal(t, payload, replay)
+}
+
+func TestSoraValidationStoresResolvedDefaults(t *testing.T) {
+	payload := []byte(`{"model":"flow-omni","prompt":"a cat surfing"}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+	defer common.CleanupBodyStorage(c)
+
+	info := &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+	require.Nil(t, taskErr)
+	request, err := relaycommon.GetTaskRequest(c)
+	require.NoError(t, err)
+	assert.Equal(t, "720x1280", request.Size)
+	assert.Equal(t, "4", request.Seconds)
+	assert.Zero(t, request.Duration)
+}
+
+func TestSoraBuildRequestBodyWritesResolvedJSONDefaults(t *testing.T) {
+	payload := []byte(`{"model":"flow-omni","prompt":"a cat surfing"}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "flow-omni"})
+	defer common.CleanupBodyStorage(c)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "flow/omni"},
+	}
+	body, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var request map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &request))
+	assert.Equal(t, "flow/omni", request["model"])
+	assert.Equal(t, "720x1280", request["size"])
+	assert.Equal(t, "4", request["seconds"])
+}
+
+func TestSoraBuildRequestBodyWritesResolvedMultipartDefaults(t *testing.T) {
+	var input bytes.Buffer
+	inputWriter := multipart.NewWriter(&input)
+	require.NoError(t, inputWriter.WriteField("model", "flow-omni"))
+	require.NoError(t, inputWriter.WriteField("prompt", "a cat surfing"))
+	require.NoError(t, inputWriter.Close())
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(input.Bytes()))
+	c.Request.Header.Set("Content-Type", inputWriter.FormDataContentType())
+	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "flow-omni"})
+	defer common.CleanupBodyStorage(c)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "flow/omni"},
+	}
+	body, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	_, params, err := mime.ParseMediaType(c.Request.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	reader := multipart.NewReader(bytes.NewReader(encoded), params["boundary"])
+	form, err := reader.ReadForm(1 << 20)
+	require.NoError(t, err)
+	defer form.RemoveAll()
+	assert.Equal(t, []string{"flow/omni"}, form.Value["model"])
+	assert.Equal(t, []string{"720x1280"}, form.Value["size"])
+	assert.Equal(t, []string{"4"}, form.Value["seconds"])
+}
+
+func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	upstream := `{"id":"video_internal","object":"video","model":"flow/omni","status":"processing"}`
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(upstream))}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "flow-omni",
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			PublicTaskID: "task_public",
+		},
+	}
+
+	taskID, _, taskErr := (&TaskAdaptor{}).DoResponse(c, resp, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, "video_internal", taskID)
+
+	var response responseTask
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, "task_public", response.ID)
+	assert.Equal(t, "task_public", response.TaskID)
+	assert.Equal(t, "flow-omni", response.Model)
 }

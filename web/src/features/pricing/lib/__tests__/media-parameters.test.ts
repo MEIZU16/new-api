@@ -36,14 +36,28 @@ function model(
   }
 }
 
+const proAspectRatios = [
+  '1:1',
+  '9:16',
+  '16:9',
+  '3:4',
+  '4:3',
+  '3:2',
+  '2:3',
+  '5:4',
+  '4:5',
+  '21:9',
+]
+const flashAspectRatios = [...proAspectRatios, '4:1', '1:4', '8:1', '1:8']
+
 describe('media API supported parameters', () => {
   it.each([
-    ['gemini-3-pro-image', '1K'],
-    ['gemini-3-pro-image-2k', '2K'],
-    ['gemini-3.1-flash-image-4k', '4K'],
+    ['gemini-3-pro-image', '1K', proAspectRatios],
+    ['gemini-3-pro-image-2k', '2K', proAspectRatios],
+    ['gemini-3.1-flash-image-4k', '4K', flashAspectRatios],
   ])(
-    'shows the locked resolution and seven aspect ratios for %s',
-    (modelName, resolution) => {
+    'shows the locked resolution and model-specific aspect ratios for %s',
+    (modelName, resolution, aspectRatios) => {
       const parameters = buildSupportedParameters(
         model(modelName, ['image-generation'])
       )
@@ -53,15 +67,8 @@ describe('media API supported parameters', () => {
         'extra_fields.aspect_ratio',
         'n',
       ])
-      expect(parameters[1]?.enumValues).toEqual([
-        '1:1',
-        '16:9',
-        '9:16',
-        '4:3',
-        '3:4',
-        '3:2',
-        '2:3',
-      ])
+      expect(parameters[1]?.type).toBe('enum')
+      expect(parameters[1]?.enumValues).toEqual(aspectRatios)
       expect(parameters[1]?.descriptionKey).toContain(resolution)
       expect(parameters[2]?.defaultValue).toBe(1)
       expect(parameters[2]?.range).toBeUndefined()

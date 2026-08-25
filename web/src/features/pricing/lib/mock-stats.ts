@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '../types'
 import {
-  MEDIA_IMAGE_ASPECT_RATIOS,
+  mediaImageAspectRatios,
   mediaImageResolution,
   type MediaImageResolution,
 } from './media-docs'
@@ -702,6 +702,7 @@ const IMAGE_ASPECT_RATIO_DESCRIPTIONS: Record<MediaImageResolution, string> = {
 
 function buildImageParameters(model: PricingModel): SupportedParameter[] {
   const resolution = mediaImageResolution(model.model_name)
+  const aspectRatios = mediaImageAspectRatios(model.model_name)
   const aspectRatioDescription = resolution
     ? IMAGE_ASPECT_RATIO_DESCRIPTIONS[resolution]
     : 'Output aspect ratio; defaults to 1:1'
@@ -715,8 +716,8 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
     },
     {
       name: 'extra_fields.aspect_ratio',
-      type: 'enum',
-      enumValues: [...MEDIA_IMAGE_ASPECT_RATIOS],
+      type: aspectRatios ? 'enum' : 'string',
+      enumValues: aspectRatios ? [...aspectRatios] : undefined,
       descriptionKey: aspectRatioDescription,
     },
     {
