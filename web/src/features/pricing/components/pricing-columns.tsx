@@ -34,6 +34,7 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { isPerSecondMediaModel } from '../lib/media-docs'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import {
   formatPrice,
@@ -223,12 +224,15 @@ export function usePricingColumns(
             selectedGroup
           )
         )
+        const fixedPriceUnit = isPerSecondMediaModel(model.model_name)
+          ? t('second')
+          : t('request')
 
         return (
           <div className='max-w-full min-w-0'>
             <span className='font-mono text-sm tabular-nums'>{price}</span>
             <div className='text-muted-foreground/50 text-[10px]'>
-              / {t('request')}
+              / {fixedPriceUnit}
             </div>
           </div>
         )
