@@ -37,13 +37,13 @@ function model(modelName: string, quotaType: number): PricingModel {
 const models = [
   model('chat-model', 0),
   model('gemini-3-pro-image', 1),
-  model('flow-omni', 1),
+  model('omni-flash', 1),
 ]
 
 describe('media pricing cadence', () => {
-  it('marks only the public flow-omni SKU as per-second', () => {
-    expect(isPerSecondMediaModel('flow-omni')).toBe(true)
-    expect(isPerSecondMediaModel('FLOW-OMNI')).toBe(true)
+  it('marks only the public omni-flash SKU as per-second', () => {
+    expect(isPerSecondMediaModel('omni-flash')).toBe(true)
+    expect(isPerSecondMediaModel('OMNI-FLASH')).toBe(true)
     expect(isPerSecondMediaModel('gemini-3-pro-image')).toBe(false)
   })
 
@@ -57,6 +57,6 @@ describe('media pricing cadence', () => {
       filterByQuotaType(models, QUOTA_TYPES.SECOND).map(
         (item) => item.model_name
       )
-    ).toEqual(['flow-omni'])
+    ).toEqual(['omni-flash'])
   })
 })

@@ -34,7 +34,7 @@ const IMAGE_CONTEXT = {
 const VIDEO_CONTEXT = {
   baseUrl: 'https://api.example.com',
   apiKeyEnv: 'NEW_API_KEY',
-  modelName: 'flow-omni',
+  modelName: 'omni-flash',
   endpointType: 'openai-video',
   endpointPath: '/v1/videos',
 }

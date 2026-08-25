@@ -20,7 +20,7 @@ export type MediaImageResolution = '1K' | '2K' | '4K'
 
 const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
-const PER_SECOND_MEDIA_MODELS = new Set(['flow-omni'])
+const PER_SECOND_MEDIA_MODELS = new Set(['omni-flash'])
 
 const PRO_IMAGE_ASPECT_RATIOS = [
   '1:1',

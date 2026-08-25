@@ -78,9 +78,9 @@ describe('media API supported parameters', () => {
     }
   )
 
-  it('uses the actual flow-omni video fields instead of generic video fields', () => {
+  it('uses the actual omni-flash video fields instead of generic video fields', () => {
     const parameters = buildSupportedParameters(
-      model('flow-omni', ['openai-video'])
+      model('omni-flash', ['openai-video'])
     )
 
     expect(parameters.map((parameter) => parameter.name)).toEqual([

@@ -46,7 +46,7 @@ func TestSoraBuildRequestBodyReturnsReplayablePassThroughBody(t *testing.T) {
 }
 
 func TestSoraValidationStoresResolvedDefaults(t *testing.T) {
-	payload := []byte(`{"model":"flow-omni","prompt":"a cat surfing"}`)
+	payload := []byte(`{"model":"omni-flash","prompt":"a cat surfing"}`)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(payload))
 	c.Request.Header.Set("Content-Type", "application/json")
@@ -63,11 +63,11 @@ func TestSoraValidationStoresResolvedDefaults(t *testing.T) {
 }
 
 func TestSoraBuildRequestBodyWritesResolvedJSONDefaults(t *testing.T) {
-	payload := []byte(`{"model":"flow-omni","prompt":"a cat surfing"}`)
+	payload := []byte(`{"model":"omni-flash","prompt":"a cat surfing"}`)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(payload))
 	c.Request.Header.Set("Content-Type", "application/json")
-	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "flow-omni"})
+	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "omni-flash"})
 	defer common.CleanupBodyStorage(c)
 
 	info := &relaycommon.RelayInfo{
@@ -88,14 +88,14 @@ func TestSoraBuildRequestBodyWritesResolvedJSONDefaults(t *testing.T) {
 func TestSoraBuildRequestBodyWritesResolvedMultipartDefaults(t *testing.T) {
 	var input bytes.Buffer
 	inputWriter := multipart.NewWriter(&input)
-	require.NoError(t, inputWriter.WriteField("model", "flow-omni"))
+	require.NoError(t, inputWriter.WriteField("model", "omni-flash"))
 	require.NoError(t, inputWriter.WriteField("prompt", "a cat surfing"))
 	require.NoError(t, inputWriter.Close())
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(input.Bytes()))
 	c.Request.Header.Set("Content-Type", inputWriter.FormDataContentType())
-	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "flow-omni"})
+	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat surfing", Model: "omni-flash"})
 	defer common.CleanupBodyStorage(c)
 
 	info := &relaycommon.RelayInfo{
@@ -123,7 +123,7 @@ func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
 	upstream := `{"id":"video_internal","object":"video","model":"flow/omni","status":"processing"}`
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(upstream))}
 	info := &relaycommon.RelayInfo{
-		OriginModelName: "flow-omni",
+		OriginModelName: "omni-flash",
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
 			PublicTaskID: "task_public",
 		},
@@ -137,14 +137,14 @@ func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.Equal(t, "task_public", response.ID)
 	assert.Equal(t, "task_public", response.TaskID)
-	assert.Equal(t, "flow-omni", response.Model)
+	assert.Equal(t, "omni-flash", response.Model)
 }
 
 func TestSoraPollingRestoresThePublicModelName(t *testing.T) {
 	task := &model.Task{
 		TaskID: "task_public",
 		Properties: model.Properties{
-			OriginModelName: "flow-omni",
+			OriginModelName: "omni-flash",
 		},
 		Data: json.RawMessage(`{"id":"video_internal","object":"video","model":"flow/omni","status":"completed"}`),
 	}
@@ -155,5 +155,5 @@ func TestSoraPollingRestoresThePublicModelName(t *testing.T) {
 	var response responseTask
 	require.NoError(t, json.Unmarshal(data, &response))
 	assert.Equal(t, "task_public", response.ID)
-	assert.Equal(t, "flow-omni", response.Model)
+	assert.Equal(t, "omni-flash", response.Model)
 }
