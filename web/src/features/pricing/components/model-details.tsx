@@ -67,6 +67,7 @@ import {
   isDynamicPricingModel,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { isPerSecondMediaModel } from '../lib/media-docs'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
 import type {
@@ -708,7 +709,9 @@ function PriceSection(props: {
         <SectionTitle>{t('Base Price')}</SectionTitle>
         <div className='flex items-baseline justify-between'>
           <span className='text-muted-foreground text-sm'>
-            {t('Per request')}
+            {isPerSecondMediaModel(props.model.model_name)
+              ? t('Per Second')
+              : t('Per request')}
           </span>
           <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
             {formatFixedPrice(

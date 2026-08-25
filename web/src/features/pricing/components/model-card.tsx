@@ -30,6 +30,7 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { isPerSecondMediaModel } from '../lib/media-docs'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
@@ -177,6 +178,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       </>
     )
   } else {
+    const fixedPriceUnit = isPerSecondMediaModel(props.model.model_name)
+      ? t('second')
+      : t('request')
     priceSummary = (
       <span className='text-muted-foreground whitespace-nowrap'>
         <span className='text-foreground font-mono font-semibold'>
@@ -188,7 +192,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             props.selectedGroup
           )}
         </span>{' '}
-        / {t('request')}
+        / {fixedPriceUnit}
       </span>
     )
   }
