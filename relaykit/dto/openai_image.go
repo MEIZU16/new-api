@@ -10,9 +10,9 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
-// MaxImageN caps the image generation count. Without this bound a huge or
-// wrapped-negative n overflows quota calculation into a negative charge.
-const MaxImageN = 128
+// MaxImageN matches the upstream media capacity. Keeping the public gateway at
+// four prevents requests that a2a cannot fulfill and bounds quota calculation.
+const MaxImageN = 4
 
 type ImageRequest struct {
 	Model             string          `json:"model"`

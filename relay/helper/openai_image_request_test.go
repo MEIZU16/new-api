@@ -77,6 +77,9 @@ func TestGetAndValidOpenAIImageRequestMultipartStream(t *testing.T) {
 // large enough to overflow int64 into a negative charge.
 func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	// This is a service contract, not merely an overflow guard: a2a can produce
+	// at most four images for one OpenAI Images request.
+	require.Equal(t, uint(4), uint(dto.MaxImageN))
 
 	newJSONContext := func(t *testing.T, body string) *gin.Context {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
