@@ -218,7 +218,7 @@ export function buildVideoSample(
       '',
       `type VideoTask = {`,
       `  id: string`,
-      `  status: 'queued' | 'processing' | 'completed' | 'failed'`,
+      `  status: 'queued' | 'in_progress' | 'completed' | 'failed'`,
       `  error?: { message?: string }`,
       `}`,
       '',

@@ -69,4 +69,11 @@ describe('media API code samples', () => {
       expect(sample).not.toContain('/v1/chat/completions')
     }
   )
+
+  it('uses the OpenAI video status name in the TypeScript task type', () => {
+    const sample = buildMediaSample('typescript', 'openai-video', VIDEO_CONTEXT)
+
+    expect(sample).toContain("'in_progress'")
+    expect(sample).not.toContain("'processing'")
+  })
 })
