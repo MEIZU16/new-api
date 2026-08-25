@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -179,6 +180,15 @@ func GetAndValidateResponsesCompactionRequest(c *gin.Context) (*dto.OpenAIRespon
 	return request, nil
 }
 
+func invalidImageCountError() error {
+	return types.NewErrorWithStatusCode(
+		fmt.Errorf("n must be an integer between 1 and %d", dto.MaxImageN),
+		types.ErrorCodeInvalidRequest,
+		http.StatusBadRequest,
+		types.ErrOptionWithSkipRetry(),
+	)
+}
+
 func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageRequest, error) {
 	imageRequest := &dto.ImageRequest{}
 
@@ -197,7 +207,7 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			if nValue := strings.TrimSpace(formData.Get("n")); nValue != "" {
 				n, err := strconv.Atoi(nValue)
 				if err != nil || n < 0 || n > dto.MaxImageN {
-					return nil, fmt.Errorf("n must be an integer between 1 and %d", dto.MaxImageN)
+					return nil, invalidImageCountError()
 				}
 				imageRequest.N = common.GetPointer(uint(n))
 			}
@@ -247,7 +257,7 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		}
 
 		if imageRequest.N != nil && *imageRequest.N > dto.MaxImageN {
-			return nil, fmt.Errorf("n must be an integer between 1 and %d", dto.MaxImageN)
+			return nil, invalidImageCountError()
 		}
 
 		// Not "256x256", "512x512", or "1024x1024"
