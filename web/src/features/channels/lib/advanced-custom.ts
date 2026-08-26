@@ -76,6 +76,11 @@ export const ADVANCED_CUSTOM_CONVERTER_OPTIONS: Array<{
     label: 'OpenAI Chat to Gemini Generate Content',
     triggerLabel: 'To Gemini Generate Content',
   },
+  {
+    value: 'openai_images_to_gemini_generate_content',
+    label: 'OpenAI Images to Gemini Generate Content',
+    triggerLabel: 'To Gemini Generate Content',
+  },
 ]
 
 export type AdvancedCustomAuthMode = 'default' | AdvancedCustomAuthType
@@ -196,6 +201,8 @@ export type AdvancedCustomModelRuleKind = 'exact' | 'regex'
 
 const openAIChatPath = '/v1/chat/completions'
 const openAIResponsesPath = '/v1/responses'
+const openAIImageGenerationPath = '/v1/images/generations'
+const openAIImageEditsPath = '/v1/images/edits'
 const claudeMessagesPath = '/v1/messages'
 const geminiGenerateContentPath = '/v1beta/models/{model}:generateContent'
 
@@ -457,7 +464,8 @@ export function getAdvancedCustomConverterDefaults(
   }
   if (
     converter === 'openai_chat_completions_to_gemini_generate_content' ||
-    converter === 'openai_responses_to_gemini_generate_content'
+    converter === 'openai_responses_to_gemini_generate_content' ||
+    converter === 'openai_images_to_gemini_generate_content'
   ) {
     return { upstream_path: geminiGenerateContentPath, auth: geminiQueryAuth() }
   }
@@ -915,6 +923,12 @@ function isConverterPathAllowed(
   }
   if (converter === 'openai_responses_to_gemini_generate_content') {
     return incomingPath === '/v1/responses'
+  }
+  if (converter === 'openai_images_to_gemini_generate_content') {
+    return (
+      incomingPath === openAIImageGenerationPath ||
+      incomingPath === openAIImageEditsPath
+    )
   }
   return (
     incomingPath.includes(':generateContent') ||

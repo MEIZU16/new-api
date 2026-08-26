@@ -59,6 +59,36 @@ func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 	}
 }
 
+func TestAdvancedCustomValidateOpenAIImagesToGeminiConverterPaths(t *testing.T) {
+	for _, incomingPath := range []string{
+		advancedCustomEndpointPathImageGeneration,
+		advancedCustomEndpointPathImageEdits,
+	} {
+		t.Run(incomingPath, func(t *testing.T) {
+			config := &AdvancedCustomConfig{Routes: []AdvancedCustomRoute{
+				{
+					IncomingPath: incomingPath,
+					UpstreamPath: "/v1beta/models/{model}:generateContent",
+					Converter:    advancedCustomConverterOpenAIImagesToGeminiContent,
+				},
+			}}
+			require.NoError(t, config.Validate())
+			require.Equal(t, []types.EndpointType{types.EndpointTypeImageGeneration}, config.SupportedEndpointTypesForModel("gemini-3-pro-image"))
+		})
+	}
+
+	invalid := &AdvancedCustomConfig{Routes: []AdvancedCustomRoute{
+		{
+			IncomingPath: "/v1/chat/completions",
+			UpstreamPath: "/v1beta/models/{model}:generateContent",
+			Converter:    advancedCustomConverterOpenAIImagesToGeminiContent,
+		},
+	}}
+	err := invalid.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "converter does not match incoming_path")
+}
+
 func TestAdvancedCustomValidateModelListRouteConstraints(t *testing.T) {
 	valid := &AdvancedCustomConfig{
 		Routes: []AdvancedCustomRoute{

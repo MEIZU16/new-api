@@ -103,6 +103,7 @@ const (
 	advancedCustomConverterOpenAIResponsesToGemini     = "openai_responses_to_gemini_generate_content"
 	advancedCustomConverterGeminiContentToOpenAIChat   = "gemini_generate_content_to_openai_chat_completions"
 	advancedCustomConverterOpenAIChatToGeminiContent   = "openai_chat_completions_to_gemini_generate_content"
+	advancedCustomConverterOpenAIImagesToGeminiContent = "openai_images_to_gemini_generate_content"
 )
 
 const (
@@ -142,6 +143,7 @@ const (
 	advancedCustomEndpointPathClaudeMessages         = "/v1/messages"
 	advancedCustomEndpointPathJinaRerank             = "/v1/rerank"
 	advancedCustomEndpointPathImageGeneration        = "/v1/images/generations"
+	advancedCustomEndpointPathImageEdits             = "/v1/images/edits"
 	advancedCustomEndpointPathEmbeddings             = "/v1/embeddings"
 )
 
@@ -260,7 +262,7 @@ func advancedCustomEndpointTypeFromIncomingPath(incomingPath string) (types.Endp
 		return types.EndpointTypeAnthropic, true
 	case advancedCustomEndpointPathJinaRerank:
 		return types.EndpointTypeJinaRerank, true
-	case advancedCustomEndpointPathImageGeneration:
+	case advancedCustomEndpointPathImageGeneration, advancedCustomEndpointPathImageEdits:
 		return types.EndpointTypeImageGeneration, true
 	case advancedCustomEndpointPathEmbeddings:
 		return types.EndpointTypeEmbeddings, true
@@ -360,7 +362,8 @@ func IsAdvancedCustomConverterAllowed(converter string) bool {
 		advancedCustomConverterOpenAIResponsesToOpenAIChat,
 		advancedCustomConverterOpenAIResponsesToGemini,
 		advancedCustomConverterGeminiContentToOpenAIChat,
-		advancedCustomConverterOpenAIChatToGeminiContent:
+		advancedCustomConverterOpenAIChatToGeminiContent,
+		advancedCustomConverterOpenAIImagesToGeminiContent:
 		return true
 	default:
 		return false
@@ -562,6 +565,10 @@ func validateAdvancedCustomConverterPath(index int, incomingPath string, convert
 		}
 	case advancedCustomConverterOpenAIResponsesToGemini:
 		if incomingPath == "/v1/responses" {
+			return nil
+		}
+	case advancedCustomConverterOpenAIImagesToGeminiContent:
+		if incomingPath == advancedCustomEndpointPathImageGeneration || incomingPath == advancedCustomEndpointPathImageEdits {
 			return nil
 		}
 	case advancedCustomConverterGeminiContentToOpenAIChat:

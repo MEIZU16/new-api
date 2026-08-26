@@ -41,11 +41,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useStatus } from '@/hooks/use-status'
 
 import {
-  buildGeminiImageReferenceSample,
   buildImageEditSample,
   buildMediaSample,
 } from '../lib/media-code-samples'
-import { isGeminiImageModel, isPromptOnlyImageModel } from '../lib/media-docs'
+import { isGeminiImageModel } from '../lib/media-docs'
 import {
   buildRateLimits,
   buildSupportedParameters,
@@ -363,14 +362,13 @@ function buildSample(
   ctx: SampleContext
 ): string {
   if (endpointType === 'anthropic') return buildAnthropicSample(lang, ctx)
-
-  const mediaSample = buildMediaSample(lang, endpointType, ctx)
-  if (mediaSample !== null) return mediaSample
-
   if (endpointType === 'gemini') return buildGeminiSample(lang, ctx)
   if (endpointType === 'embeddings' || endpointType === 'jina-rerank') {
     return buildEmbeddingSample(lang, ctx)
   }
+
+  const mediaSample = buildMediaSample(lang, endpointType, ctx)
+  if (mediaSample !== null) return mediaSample
   return buildChatSample(lang, ctx)
 }
 
@@ -433,18 +431,11 @@ function CodeSamplesSection(props: {
     endpointPath: activeEndpoint.path,
   }
   const code = buildSample(lang, activeEndpoint.type, sampleContext)
-  const usesNativeGeminiImage =
-    activeEndpoint.type === 'gemini' &&
-    isGeminiImageModel(props.model.model_name || '')
-  const usesOpenAIImage =
+  const referenceImageCode =
     activeEndpoint.type === 'image-generation' &&
-    isPromptOnlyImageModel(props.model.model_name || '')
-  let referenceImageCode: string | null = null
-  if (usesNativeGeminiImage) {
-    referenceImageCode = buildGeminiImageReferenceSample(lang, sampleContext)
-  } else if (usesOpenAIImage) {
-    referenceImageCode = buildImageEditSample(lang, sampleContext)
-  }
+    isGeminiImageModel(props.model.model_name || '')
+      ? buildImageEditSample(lang, sampleContext)
+      : null
 
   return (
     <section>
@@ -488,27 +479,23 @@ function CodeSamplesSection(props: {
         </CodeBlock>
       </div>
 
-      {referenceImageCode && (
+      {referenceImageCode ? (
         <div className='mt-5'>
           <div className='mb-2'>
             <p className='text-sm font-medium'>
               {t('Reference image request')}
             </p>
             <p className='text-muted-foreground mt-0.5 text-xs'>
-              {usesNativeGeminiImage
-                ? t(
-                    'Send the reference image as Gemini inlineData in the same generateContent request.'
-                  )
-                : t(
-                    'Send the reference image to /v1/images/edits as multipart/form-data using the image field.'
-                  )}
+              {t(
+                'Send the reference image to /v1/images/edits as multipart/form-data using the image field.'
+              )}
             </p>
           </div>
           <CodeBlock code={referenceImageCode} language={LANG_HIGHLIGHT[lang]}>
             <CodeBlockCopyButton />
           </CodeBlock>
         </div>
-      )}
+      ) : null}
 
       <p className='text-muted-foreground mt-2 text-xs'>
         {t('Replace')}{' '}

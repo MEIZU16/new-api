@@ -709,59 +709,30 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
     required: true,
     descriptionKey: 'Text description of the desired image',
   }
-  if (isPromptOnlyImageModel(model.model_name)) {
-    return [
-      promptParameter,
-      {
-        name: 'image',
-        type: 'file',
-        descriptionKey:
-          'Reference image file for /v1/images/edits (multipart/form-data)',
-      },
-    ]
-  }
+  if (isPromptOnlyImageModel(model.model_name)) return [promptParameter]
 
   const resolution = mediaImageResolution(model.model_name)
   const aspectRatios = mediaImageAspectRatios(model.model_name)
   const aspectRatioDescription = resolution
     ? IMAGE_ASPECT_RATIO_DESCRIPTIONS[resolution]
     : 'Output aspect ratio; defaults to 1:1'
-  const nativeGemini =
-    resolution !== null &&
-    (model.supported_endpoint_types ?? []).includes('gemini')
 
-  if (nativeGemini) {
-    return [
-      {
-        name: 'contents[].parts[].text',
-        type: 'string',
-        required: true,
-        descriptionKey: 'Text instruction for Gemini image generation',
-      },
-      {
-        name: 'contents[].parts[].inlineData',
-        type: 'object',
-        descriptionKey:
-          'Optional Gemini inline image containing mimeType and Base64 data',
-      },
-      {
-        name: 'generationConfig.imageConfig.aspectRatio',
-        type: aspectRatios ? 'enum' : 'string',
-        enumValues: aspectRatios ? [...aspectRatios] : undefined,
-        descriptionKey: aspectRatioDescription,
-      },
-    ]
+  const parameters: SupportedParameter[] = [promptParameter]
+  if (resolution) {
+    parameters.push({
+      name: 'image',
+      type: 'file',
+      descriptionKey:
+        'Reference image file for /v1/images/edits (multipart/form-data)',
+    })
   }
-
-  return [
-    promptParameter,
-    {
-      name: 'extra_fields.aspect_ratio',
-      type: aspectRatios ? 'enum' : 'string',
-      enumValues: aspectRatios ? [...aspectRatios] : undefined,
-      descriptionKey: aspectRatioDescription,
-    },
-  ]
+  parameters.push({
+    name: 'extra_fields.aspect_ratio',
+    type: aspectRatios ? 'enum' : 'string',
+    enumValues: aspectRatios ? [...aspectRatios] : undefined,
+    descriptionKey: aspectRatioDescription,
+  })
+  return parameters
 }
 
 const VIDEO_PARAMS: SupportedParameter[] = [

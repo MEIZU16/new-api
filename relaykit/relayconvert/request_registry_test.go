@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
+func TestRequestConverterRegistryListsSupportedConverters(t *testing.T) {
 	tests := []struct {
 		converter      string
 		from           types.RelayFormat
@@ -78,6 +78,13 @@ func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 			from:           types.RelayFormatOpenAIResponses,
 			to:             types.RelayFormatGemini,
 			quality:        RequestConverterQualityFair,
+			advancedCustom: true,
+		},
+		{
+			converter:      ConverterOpenAIImagesToGeminiContent,
+			from:           types.RelayFormatOpenAIImage,
+			to:             types.RelayFormatGemini,
+			quality:        RequestConverterQualityGood,
 			advancedCustom: true,
 		},
 	}

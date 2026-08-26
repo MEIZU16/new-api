@@ -175,10 +175,30 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil, err
 	}
-	if converter != relayconvert.ConverterNone {
+	switch converter {
+	case relayconvert.ConverterNone:
+		return a.convertOpenAICompatibleImageRequest(c, info, request)
+	case relayconvert.ConverterOpenAIImagesToGeminiContent:
+		if info.RelayMode == relayconstant.RelayModeImagesEdits {
+			if isJSONRequest(c) {
+				return nil, invalidGeminiImageEditRequest("image edits for this model require multipart/form-data")
+			}
+			if err := populateGeminiImageReferences(c, &request); err != nil {
+				return nil, err
+			}
+		}
+		result, err := service.ConvertRequestByID(c, info, converter, &request)
+		if err != nil {
+			return nil, err
+		}
+		geminiRequest, ok := result.Value.(*dto.GeminiChatRequest)
+		if !ok {
+			return nil, fmt.Errorf("expected Gemini generateContent request, got %T", result.Value)
+		}
+		return geminiRequest, nil
+	default:
 		return nil, fmt.Errorf("converter %q does not support image requests", converter)
 	}
-	return a.convertOpenAICompatibleImageRequest(c, info, request)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -278,6 +298,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 	if shouldApplyClaudeHeaders(a.converter, info) {
 		applyClaudeHeaders(c, header, info)
 	}
+	if a.converter == relayconvert.ConverterOpenAIImagesToGeminiContent {
+		header.Set("Content-Type", "application/json")
+		header.Set("Accept", "application/json")
+	}
 
 	return nil
 }
@@ -292,7 +316,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 
 	if info.RelayMode == relayconstant.RelayModeAudioTranscription ||
 		info.RelayMode == relayconstant.RelayModeAudioTranslation ||
-		(info.RelayMode == relayconstant.RelayModeImagesEdits && !isJSONRequest(c)) {
+		(info.RelayMode == relayconstant.RelayModeImagesEdits &&
+			a.converter != relayconvert.ConverterOpenAIImagesToGeminiContent &&
+			!isJSONRequest(c)) {
 		return channel.DoFormRequest(a, c, info, requestBody)
 	}
 	if info.RelayMode == relayconstant.RelayModeRealtime {
@@ -318,6 +344,8 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		return a.geminiAdaptor.DoResponse(c, resp, info)
 	case relayconvert.ConverterOpenAIResponsesToGemini:
 		return a.geminiAdaptor.DoResponse(c, resp, info)
+	case relayconvert.ConverterOpenAIImagesToGeminiContent:
+		return gemini.GeminiGenerateContentImageHandler(c, info, resp)
 	case relayconvert.ConverterOpenAIChatToOpenAIResponses:
 		if info.IsStream {
 			return openai.OaiResponsesToChatStreamHandler(c, info, resp)

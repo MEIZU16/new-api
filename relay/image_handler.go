@@ -76,7 +76,13 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				}
 			}
 
-			logger.LogDebug(c, "image request body: %s", jsonData)
+			if _, isGeminiGenerateContent := convertedRequest.(*dto.GeminiChatRequest); isGeminiGenerateContent {
+				// Reference-image edits contain Base64 inlineData. Logging only the
+				// payload size avoids persisting uploaded images or prompts in debug logs.
+				logger.LogDebug(c, "Gemini image request body size: %d bytes", len(jsonData))
+			} else {
+				logger.LogDebug(c, "image request body: %s", jsonData)
+			}
 			body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

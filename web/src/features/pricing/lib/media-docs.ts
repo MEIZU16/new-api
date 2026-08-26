@@ -44,12 +44,12 @@ const FLASH_IMAGE_ASPECT_RATIOS = [
   '1:8',
 ] as const
 
-/** Return whether this service exposes the model through native Gemini image generation. */
+/** Return whether the model is one of this service's Gemini image SKUs. */
 export function isGeminiImageModel(modelName: string): boolean {
   return MEDIA_IMAGE_MODEL_PATTERN.test(modelName.trim())
 }
 
-/** Return whether public OpenAI Images documentation should expose only the prompt. */
+/** Return whether public documentation should expose only the image prompt. */
 export function isPromptOnlyImageModel(modelName: string): boolean {
   return PROMPT_ONLY_IMAGE_MODELS.has(modelName.trim().toLowerCase())
 }

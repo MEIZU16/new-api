@@ -73,6 +73,78 @@ func TestGetAndValidOpenAIImageRequestMultipartStream(t *testing.T) {
 	})
 }
 
+func TestGetAndValidOpenAIImageRequestMultipartGeminiFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newContext := func(t *testing.T, fields map[string]string) *gin.Context {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		for key, value := range fields {
+			require.NoError(t, writer.WriteField(key, value))
+		}
+		part, err := writer.CreateFormFile("image", "input.png")
+		require.NoError(t, err)
+		_, err = part.Write([]byte("fake image"))
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		return c
+	}
+
+	t.Run("parses extra_fields and direct aspect_ratio", func(t *testing.T) {
+		c := newContext(t, map[string]string{
+			"model":        "gemini-3-pro-image-2k",
+			"prompt":       "edit this image",
+			"extra_fields": `{"unused":"ignored","aspect_ratio":"1:1"}`,
+			"aspect_ratio": "16:9",
+		})
+		request, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+		require.NoError(t, err)
+		var extraFields map[string]any
+		require.NoError(t, common.Unmarshal(request.ExtraFields, &extraFields))
+		require.Equal(t, "16:9", extraFields["aspect_ratio"])
+		require.Equal(t, "ignored", extraFields["unused"])
+	})
+
+	for _, testCase := range []struct {
+		name   string
+		fields map[string]string
+		error  string
+	}{
+		{
+			name:   "requires model",
+			fields: map[string]string{"prompt": "edit this image"},
+			error:  "model is required",
+		},
+		{
+			name:   "requires prompt",
+			fields: map[string]string{"model": "gemini-3-pro-image"},
+			error:  "prompt is required",
+		},
+		{
+			name: "rejects non-object extra_fields",
+			fields: map[string]string{
+				"model":        "gemini-3-pro-image",
+				"prompt":       "edit this image",
+				"extra_fields": `[]`,
+			},
+			error: "invalid extra_fields value",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := GetAndValidOpenAIImageRequest(
+				newContext(t, testCase.fields),
+				relayconstant.RelayModeImagesEdits,
+			)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), testCase.error)
+		})
+	}
+}
+
 // TestGetAndValidOpenAIImageRequestNBounds guards the billing invariant that
 // the image generation count can never reach quota calculation with a value
 // large enough to overflow int64 into a negative charge.

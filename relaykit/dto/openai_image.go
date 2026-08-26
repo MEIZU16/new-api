@@ -14,6 +14,14 @@ import (
 // four prevents requests that a2a cannot fulfill and bounds quota calculation.
 const MaxImageN = 4
 
+// ImageReference carries an already encoded image used by protocol converters.
+// It is intentionally excluded from the OpenAI wire shape: multipart adapters
+// populate it only after the public request has been parsed.
+type ImageReference struct {
+	MimeType string
+	Data     string
+}
+
 type ImageRequest struct {
 	Model             string          `json:"model"`
 	Prompt            string          `json:"prompt" binding:"required"`
@@ -35,9 +43,10 @@ type ImageRequest struct {
 	InputFidelity     json.RawMessage `json:"input_fidelity,omitempty"`
 	Watermark         *bool           `json:"watermark,omitempty"`
 	// zhipu 4v
-	WatermarkEnabled json.RawMessage `json:"watermark_enabled,omitempty"`
-	UserId           json.RawMessage `json:"user_id,omitempty"`
-	Image            json.RawMessage `json:"image,omitempty"`
+	WatermarkEnabled json.RawMessage  `json:"watermark_enabled,omitempty"`
+	UserId           json.RawMessage  `json:"user_id,omitempty"`
+	Image            json.RawMessage  `json:"image,omitempty"`
+	ReferenceImages  []ImageReference `json:"-"`
 	// 用匿名参数接收额外参数
 	Extra map[string]json.RawMessage `json:"-"`
 }

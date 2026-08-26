@@ -213,6 +213,21 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			}
 			imageRequest.Quality = formData.Get("quality")
 			imageRequest.Size = formData.Get("size")
+			extraFields := make(map[string]any)
+			if rawExtraFields := strings.TrimSpace(formData.Get("extra_fields")); rawExtraFields != "" {
+				if err := common.Unmarshal([]byte(rawExtraFields), &extraFields); err != nil {
+					return nil, fmt.Errorf("invalid extra_fields value: %w", err)
+				}
+			}
+			if aspectRatio := strings.TrimSpace(formData.Get("aspect_ratio")); aspectRatio != "" {
+				extraFields["aspect_ratio"] = aspectRatio
+			}
+			if len(extraFields) > 0 {
+				imageRequest.ExtraFields, err = common.Marshal(extraFields)
+				if err != nil {
+					return nil, fmt.Errorf("failed to encode extra_fields: %w", err)
+				}
+			}
 			if streamValue := strings.TrimSpace(formData.Get("stream")); streamValue != "" {
 				stream, err := strconv.ParseBool(streamValue)
 				if err != nil {
@@ -293,6 +308,12 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		}
 	}
 
+	if strings.TrimSpace(imageRequest.Model) == "" {
+		return nil, errors.New("model is required")
+	}
+	if strings.TrimSpace(imageRequest.Prompt) == "" {
+		return nil, errors.New("prompt is required")
+	}
 	return imageRequest, nil
 }
 
