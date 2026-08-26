@@ -180,8 +180,8 @@ function buildGeminiImageRequestSample(
     ? 'Use the reference image composition and render it as a watercolor illustration.'
     : 'A serene koi pond at sunset, rendered as a woodblock print.'
   const outputFilename = withReference
-    ? 'edited-image.png'
-    : 'generated-image.png'
+    ? 'edited-image.jpg'
+    : 'generated-image.jpg'
   const body = geminiImageBody(
     ctx,
     prompt,
