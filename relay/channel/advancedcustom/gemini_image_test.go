@@ -190,37 +190,35 @@ func TestAdaptorRejectsSpoofedGeminiReferenceImageMimeType(t *testing.T) {
 	require.True(t, types.IsSkipRetryError(apiError))
 }
 
-func TestAdaptorRejectsGeminiReferenceImageLimits(t *testing.T) {
-	t.Run("too many images", func(t *testing.T) {
-		var body bytes.Buffer
-		writer := multipart.NewWriter(&body)
-		require.NoError(t, writer.WriteField("model", "gemini-3-pro-image"))
-		require.NoError(t, writer.WriteField("prompt", "edit this"))
-		imageBytes := mustEncodeAdvancedCustomTestImage(t, "png")
-		for range maxGeminiReferenceImages + 1 {
-			part, err := writer.CreateFormFile("image[]", "reference.png")
-			require.NoError(t, err)
-			_, err = part.Write(imageBytes)
-			require.NoError(t, err)
-		}
-		require.NoError(t, writer.Close())
-
-		c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", &body)
-		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
-		request, err := relayhelper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+func TestAdaptorAcceptsMoreThanFourGeminiReferenceImages(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "gemini-3-pro-image"))
+	require.NoError(t, writer.WriteField("prompt", "edit this"))
+	imageBytes := mustEncodeAdvancedCustomTestImage(t, "png")
+	for range 5 {
+		part, err := writer.CreateFormFile("image[]", "reference.png")
 		require.NoError(t, err)
-		info := advancedCustomImageRelayInfo("/v1/images/edits")
-		info.RelayMode = relayconstant.RelayModeImagesEdits
+		_, err = part.Write(imageBytes)
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
 
-		_, err = (&Adaptor{}).ConvertImageRequest(c, info, *request)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "at most 4 reference images")
-		apiError, ok := err.(*types.NewAPIError)
-		require.True(t, ok)
-		require.Equal(t, http.StatusRequestEntityTooLarge, apiError.StatusCode)
-		require.True(t, types.IsSkipRetryError(apiError))
-	})
+	c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", &body)
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	request, err := relayhelper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+	require.NoError(t, err)
+	info := advancedCustomImageRelayInfo("/v1/images/edits")
+	info.RelayMode = relayconstant.RelayModeImagesEdits
 
+	converted, err := (&Adaptor{}).ConvertImageRequest(c, info, *request)
+	require.NoError(t, err)
+	geminiRequest, ok := converted.(*dto.GeminiChatRequest)
+	require.True(t, ok)
+	require.Len(t, geminiRequest.Contents[0].Parts, 6)
+}
+
+func TestAdaptorRejectsGeminiReferenceImageByteLimits(t *testing.T) {
 	t.Run("actual bytes exceed reported size", func(t *testing.T) {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)

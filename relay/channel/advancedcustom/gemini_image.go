@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	maxGeminiReferenceImages         = 4
 	maxGeminiReferenceImageBytes     = int64(16 << 20)
 	maxGeminiReferenceAggregateBytes = int64(32 << 20)
 )
@@ -63,12 +62,6 @@ func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) er
 	if len(imageFiles) == 0 {
 		return invalidGeminiImageEditRequest("image is required")
 	}
-	if len(imageFiles) > maxGeminiReferenceImages {
-		return geminiImageEditPayloadTooLarge(
-			fmt.Sprintf("at most %d reference images are supported", maxGeminiReferenceImages),
-		)
-	}
-
 	declaredBytes := int64(0)
 	for index, fileHeader := range imageFiles {
 		if fileHeader == nil || fileHeader.Size < 0 {
