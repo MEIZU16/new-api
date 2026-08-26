@@ -22,6 +22,7 @@ export type MediaImageResolution = '1K' | '2K' | '4K'
 
 const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
+const PROMPT_ONLY_IMAGE_MODELS = new Set(['gpt-image-2'])
 const PRO_IMAGE_ASPECT_RATIOS = [
   '1:1',
   '9:16',
@@ -42,6 +43,11 @@ const FLASH_IMAGE_ASPECT_RATIOS = [
   '8:1',
   '1:8',
 ] as const
+
+/** Return whether public documentation should expose only the image prompt. */
+export function isPromptOnlyImageModel(modelName: string): boolean {
+  return PROMPT_ONLY_IMAGE_MODELS.has(modelName.trim().toLowerCase())
+}
 
 /** Return the resolution tier encoded in one of this service's image SKUs. */
 export function mediaImageResolution(

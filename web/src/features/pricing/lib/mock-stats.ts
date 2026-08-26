@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '../types'
 import {
+  isPromptOnlyImageModel,
   mediaImageAspectRatios,
   mediaImageResolution,
   type MediaImageResolution,
@@ -701,6 +702,14 @@ const IMAGE_ASPECT_RATIO_DESCRIPTIONS: Record<MediaImageResolution, string> = {
 }
 
 function buildImageParameters(model: PricingModel): SupportedParameter[] {
+  const promptParameter: SupportedParameter = {
+    name: 'prompt',
+    type: 'string',
+    required: true,
+    descriptionKey: 'Text description of the desired image',
+  }
+  if (isPromptOnlyImageModel(model.model_name)) return [promptParameter]
+
   const resolution = mediaImageResolution(model.model_name)
   const aspectRatios = mediaImageAspectRatios(model.model_name)
   const aspectRatioDescription = resolution
@@ -708,12 +717,7 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
     : 'Output aspect ratio; defaults to 1:1'
 
   return [
-    {
-      name: 'prompt',
-      type: 'string',
-      required: true,
-      descriptionKey: 'Text description of the desired image',
-    },
+    promptParameter,
     {
       name: 'extra_fields.aspect_ratio',
       type: aspectRatios ? 'enum' : 'string',

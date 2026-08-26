@@ -78,6 +78,20 @@ describe('media API supported parameters', () => {
     }
   )
 
+  it('shows only the prompt for gpt-image-2', () => {
+    const parameters = buildSupportedParameters(
+      model('gpt-image-2', ['image-generation'])
+    )
+
+    expect(parameters).toEqual([
+      expect.objectContaining({
+        name: 'prompt',
+        type: 'string',
+        required: true,
+      }),
+    ])
+  })
+
   it('uses the actual omni-flash video fields instead of generic video fields', () => {
     const parameters = buildSupportedParameters(
       model('omni-flash', ['openai-video'])

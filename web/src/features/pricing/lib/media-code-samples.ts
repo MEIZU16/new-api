@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { isPromptOnlyImageModel } from './media-docs'
+
 export type MediaSampleLanguage =
   | 'curl'
   | 'python'
@@ -35,11 +37,15 @@ export function buildImageSample(
 ): string {
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
   const prompt = 'A serene koi pond at sunset, rendered as a woodblock print.'
+  const promptOnly = isPromptOnlyImageModel(ctx.modelName)
+  const outputFilename = promptOnly
+    ? 'generated-image.png'
+    : 'generated-image.jpg'
   const body = JSON.stringify(
     {
       model: ctx.modelName,
       prompt,
-      extra_fields: { aspect_ratio: '16:9' },
+      ...(promptOnly ? {} : { extra_fields: { aspect_ratio: '16:9' } }),
     },
     null,
     2
@@ -65,12 +71,16 @@ export function buildImageSample(
       'response = client.images.generate(',
       `    model="${ctx.modelName}",`,
       `    prompt="${prompt}",`,
-      '    extra_body={',
-      '        "extra_fields": {"aspect_ratio": "16:9"},',
-      '    },',
+      ...(promptOnly
+        ? []
+        : [
+            '    extra_body={',
+            '        "extra_fields": {"aspect_ratio": "16:9"},',
+            '    },',
+          ]),
       ')',
       '',
-      'Path("generated-image.jpg").write_bytes(',
+      `Path("${outputFilename}").write_bytes(`,
       '    b64decode(response.data[0].b64_json)',
       ')',
     ].join('\n')
@@ -96,7 +106,7 @@ export function buildImageSample(
       `  data: Array<{ b64_json: string }>`,
       `}`,
       `await writeFile(`,
-      `  'generated-image.jpg',`,
+      `  '${outputFilename}',`,
       `  Buffer.from(data.data[0].b64_json, 'base64')`,
       `)`,
     ].join('\n')
@@ -116,7 +126,7 @@ export function buildImageSample(
     '',
     `const data = await response.json()`,
     `await writeFile(`,
-    `  'generated-image.jpg',`,
+    `  '${outputFilename}',`,
     `  Buffer.from(data.data[0].b64_json, 'base64')`,
     `)`,
   ].join('\n')

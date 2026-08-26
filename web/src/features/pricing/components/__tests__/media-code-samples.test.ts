@@ -31,6 +31,11 @@ const IMAGE_CONTEXT = {
   endpointPath: '/v1/images/generations',
 }
 
+const PROMPT_ONLY_IMAGE_CONTEXT = {
+  ...IMAGE_CONTEXT,
+  modelName: 'gpt-image-2',
+}
+
 const VIDEO_CONTEXT = {
   baseUrl: 'https://api.example.com',
   apiKeyEnv: 'NEW_API_KEY',
@@ -56,6 +61,28 @@ describe('media API code samples', () => {
       if (language !== 'curl') {
         expect(sample).toContain('b64_json')
       }
+    }
+  )
+
+  it.each(['curl', 'python', 'typescript', 'javascript'] as const)(
+    'shows only model and prompt in the %s gpt-image-2 request',
+    (language) => {
+      const sample = buildImageSample(language, PROMPT_ONLY_IMAGE_CONTEXT)
+
+      expect(sample).toContain('gpt-image-2')
+      expect(sample).toContain('prompt')
+      if (language !== 'curl') {
+        expect(sample).toContain('generated-image.png')
+      }
+      expect(sample).not.toContain('extra_fields')
+      expect(sample).not.toContain('aspect_ratio')
+      expect(sample).not.toContain('response_format')
+      expect(sample).not.toContain('background')
+      expect(sample).not.toContain('output_format')
+      expect(sample).not.toContain('quality')
+      expect(sample).not.toContain('size')
+      expect(sample).not.toContain('n=')
+      expect(sample).not.toContain('"n"')
     }
   )
 
