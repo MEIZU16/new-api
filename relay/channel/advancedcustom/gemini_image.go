@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -16,6 +14,12 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	maxGeminiReferenceImages         = 4
+	maxGeminiReferenceImageBytes     = int64(16 << 20)
+	maxGeminiReferenceAggregateBytes = int64(32 << 20)
 )
 
 func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) error {
@@ -59,8 +63,32 @@ func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) er
 	if len(imageFiles) == 0 {
 		return invalidGeminiImageEditRequest("image is required")
 	}
+	if len(imageFiles) > maxGeminiReferenceImages {
+		return geminiImageEditPayloadTooLarge(
+			fmt.Sprintf("at most %d reference images are supported", maxGeminiReferenceImages),
+		)
+	}
+
+	declaredBytes := int64(0)
+	for index, fileHeader := range imageFiles {
+		if fileHeader == nil || fileHeader.Size < 0 {
+			return invalidGeminiImageEditRequest(
+				fmt.Sprintf("reference image %d is invalid", index+1),
+			)
+		}
+		if fileHeader.Size > maxGeminiReferenceImageBytes {
+			return geminiImageEditPayloadTooLarge(
+				fmt.Sprintf("reference image %d exceeds the 16 MiB limit", index+1),
+			)
+		}
+		if fileHeader.Size > maxGeminiReferenceAggregateBytes-declaredBytes {
+			return geminiImageEditPayloadTooLarge("reference images exceed the 32 MiB aggregate limit")
+		}
+		declaredBytes += fileHeader.Size
+	}
 
 	request.ReferenceImages = make([]dto.ImageReference, 0, len(imageFiles))
+	actualBytes := int64(0)
 	for index, fileHeader := range imageFiles {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -68,7 +96,7 @@ func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) er
 				fmt.Sprintf("failed to open reference image %d: %v", index+1, err),
 			)
 		}
-		data, readErr := io.ReadAll(file)
+		data, readErr := io.ReadAll(io.LimitReader(file, maxGeminiReferenceImageBytes+1))
 		closeErr := file.Close()
 		if readErr != nil {
 			return invalidGeminiImageEditRequest(
@@ -80,16 +108,25 @@ func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) er
 				fmt.Sprintf("failed to close reference image %d: %v", index+1, closeErr),
 			)
 		}
+		if int64(len(data)) > maxGeminiReferenceImageBytes {
+			return geminiImageEditPayloadTooLarge(
+				fmt.Sprintf("reference image %d exceeds the 16 MiB limit", index+1),
+			)
+		}
 		if len(data) == 0 {
 			return invalidGeminiImageEditRequest(
 				fmt.Sprintf("reference image %d is empty", index+1),
 			)
 		}
+		if int64(len(data)) > maxGeminiReferenceAggregateBytes-actualBytes {
+			return geminiImageEditPayloadTooLarge("reference images exceed the 32 MiB aggregate limit")
+		}
+		actualBytes += int64(len(data))
 
-		mimeType := normalizedImageMimeType(fileHeader, data)
+		mimeType := normalizedImageMimeType(data)
 		if mimeType == "" {
 			return invalidGeminiImageEditRequest(
-				fmt.Sprintf("reference image %d must use an image MIME type", index+1),
+				fmt.Sprintf("reference image %d must be a valid PNG, JPEG, or WebP image", index+1),
 			)
 		}
 		request.ReferenceImages = append(request.ReferenceImages, dto.ImageReference{
@@ -100,31 +137,14 @@ func populateGeminiImageReferences(c *gin.Context, request *dto.ImageRequest) er
 	return nil
 }
 
-func normalizedImageMimeType(fileHeader *multipart.FileHeader, data []byte) string {
-	if fileHeader != nil {
-		if mediaType, _, err := mime.ParseMediaType(fileHeader.Header.Get("Content-Type")); err == nil {
-			mediaType = strings.ToLower(strings.TrimSpace(mediaType))
-			if strings.HasPrefix(mediaType, "image/") {
-				return mediaType
-			}
-		}
-	}
-
+func normalizedImageMimeType(data []byte) string {
 	detected := strings.ToLower(strings.TrimSpace(http.DetectContentType(data)))
-	if strings.HasPrefix(detected, "image/") {
+	switch detected {
+	case "image/png", "image/jpeg", "image/webp":
 		return detected
-	}
-	if fileHeader == nil {
+	default:
 		return ""
 	}
-	extensionType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fileHeader.Filename)))
-	if mediaType, _, err := mime.ParseMediaType(extensionType); err == nil {
-		mediaType = strings.ToLower(strings.TrimSpace(mediaType))
-		if strings.HasPrefix(mediaType, "image/") {
-			return mediaType
-		}
-	}
-	return ""
 }
 
 func invalidGeminiImageEditRequest(message string) error {
@@ -132,6 +152,15 @@ func invalidGeminiImageEditRequest(message string) error {
 		errors.New(message),
 		types.ErrorCodeInvalidRequest,
 		http.StatusBadRequest,
+		types.ErrOptionWithSkipRetry(),
+	)
+}
+
+func geminiImageEditPayloadTooLarge(message string) error {
+	return types.NewErrorWithStatusCode(
+		errors.New(message),
+		types.ErrorCodeInvalidRequest,
+		http.StatusRequestEntityTooLarge,
 		types.ErrOptionWithSkipRetry(),
 	)
 }

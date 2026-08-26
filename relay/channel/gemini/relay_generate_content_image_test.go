@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -45,6 +46,7 @@ func TestGeminiGenerateContentImageHandlerReturnsOpenAIImages(t *testing.T) {
 	require.Equal(t, 12, usage.PromptTokens)
 	require.Equal(t, 34, usage.CompletionTokens)
 	require.Equal(t, float64(2), info.PriceData.OtherRatios()["n"])
+	require.Equal(t, 2, common.GetContextKeyInt(c, constant.ContextKeyImageOutputCount))
 	require.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 
 	var response dto.ImageResponse

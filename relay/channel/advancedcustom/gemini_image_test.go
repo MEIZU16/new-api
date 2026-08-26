@@ -3,6 +3,9 @@ package advancedcustom
 import (
 	"bytes"
 	"encoding/base64"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -61,7 +64,7 @@ func TestAdaptorConvertsMultipartImageEditToGeminiJSON(t *testing.T) {
 	header.Set("Content-Type", "image/jpeg")
 	part, err := writer.CreatePart(header)
 	require.NoError(t, err)
-	imageBytes := []byte("reference-image-bytes")
+	imageBytes := mustEncodeAdvancedCustomTestImage(t, "jpeg")
 	_, err = part.Write(imageBytes)
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
@@ -157,6 +160,143 @@ func TestAdaptorRejectsUnsupportedGeminiImageEditInputs(t *testing.T) {
 	}
 }
 
+func TestAdaptorRejectsSpoofedGeminiReferenceImageMimeType(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "gemini-3-pro-image"))
+	require.NoError(t, writer.WriteField("prompt", "edit this"))
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", `form-data; name="image"; filename="not-an-image.jpg"`)
+	header.Set("Content-Type", "image/jpeg")
+	part, err := writer.CreatePart(header)
+	require.NoError(t, err)
+	_, err = part.Write([]byte("this is not an image"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", &body)
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	request, err := relayhelper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+	require.NoError(t, err)
+	info := advancedCustomImageRelayInfo("/v1/images/edits")
+	info.RelayMode = relayconstant.RelayModeImagesEdits
+
+	_, err = (&Adaptor{}).ConvertImageRequest(c, info, *request)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be a valid PNG, JPEG, or WebP image")
+	apiError, ok := err.(*types.NewAPIError)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, apiError.StatusCode)
+	require.True(t, types.IsSkipRetryError(apiError))
+}
+
+func TestAdaptorRejectsGeminiReferenceImageLimits(t *testing.T) {
+	t.Run("too many images", func(t *testing.T) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("model", "gemini-3-pro-image"))
+		require.NoError(t, writer.WriteField("prompt", "edit this"))
+		imageBytes := mustEncodeAdvancedCustomTestImage(t, "png")
+		for range maxGeminiReferenceImages + 1 {
+			part, err := writer.CreateFormFile("image[]", "reference.png")
+			require.NoError(t, err)
+			_, err = part.Write(imageBytes)
+			require.NoError(t, err)
+		}
+		require.NoError(t, writer.Close())
+
+		c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		request, err := relayhelper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+		require.NoError(t, err)
+		info := advancedCustomImageRelayInfo("/v1/images/edits")
+		info.RelayMode = relayconstant.RelayModeImagesEdits
+
+		_, err = (&Adaptor{}).ConvertImageRequest(c, info, *request)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "at most 4 reference images")
+		apiError, ok := err.(*types.NewAPIError)
+		require.True(t, ok)
+		require.Equal(t, http.StatusRequestEntityTooLarge, apiError.StatusCode)
+		require.True(t, types.IsSkipRetryError(apiError))
+	})
+
+	t.Run("actual bytes exceed reported size", func(t *testing.T) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("model", "gemini-3-pro-image"))
+		require.NoError(t, writer.WriteField("prompt", "edit this"))
+		part, err := writer.CreateFormFile("image", "reference.png")
+		require.NoError(t, err)
+		_, err = io.CopyN(part, advancedCustomRepeatingReader{}, maxGeminiReferenceImageBytes+1)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		request, err := relayhelper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+		require.NoError(t, err)
+		defer common.CleanupBodyStorage(c)
+		defer c.Request.MultipartForm.RemoveAll()
+		require.Len(t, c.Request.MultipartForm.File["image"], 1)
+		c.Request.MultipartForm.File["image"][0].Size = 0
+		info := advancedCustomImageRelayInfo("/v1/images/edits")
+		info.RelayMode = relayconstant.RelayModeImagesEdits
+
+		_, err = (&Adaptor{}).ConvertImageRequest(c, info, *request)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeds the 16 MiB limit")
+		apiError, ok := err.(*types.NewAPIError)
+		require.True(t, ok)
+		require.Equal(t, http.StatusRequestEntityTooLarge, apiError.StatusCode)
+		require.True(t, types.IsSkipRetryError(apiError))
+	})
+
+	for _, testCase := range []struct {
+		name  string
+		sizes []int64
+		want  string
+	}{
+		{
+			name:  "per image limit",
+			sizes: []int64{maxGeminiReferenceImageBytes + 1},
+			want:  "exceeds the 16 MiB limit",
+		},
+		{
+			name: "aggregate limit",
+			sizes: []int64{
+				maxGeminiReferenceImageBytes,
+				maxGeminiReferenceImageBytes,
+				1,
+			},
+			want: "exceed the 32 MiB aggregate limit",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			c, _ := newAdvancedCustomTestContext(http.MethodPost, "/v1/images/edits", nil)
+			c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=test")
+			files := make([]*multipart.FileHeader, 0, len(testCase.sizes))
+			for _, size := range testCase.sizes {
+				files = append(files, &multipart.FileHeader{Filename: "reference.png", Size: size})
+			}
+			c.Request.MultipartForm = &multipart.Form{File: map[string][]*multipart.FileHeader{"image": files}}
+			info := advancedCustomImageRelayInfo("/v1/images/edits")
+			info.RelayMode = relayconstant.RelayModeImagesEdits
+
+			_, err := (&Adaptor{}).ConvertImageRequest(c, info, dto.ImageRequest{
+				Model:  "gemini-3-pro-image",
+				Prompt: "edit this",
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), testCase.want)
+			apiError, ok := err.(*types.NewAPIError)
+			require.True(t, ok)
+			require.Equal(t, http.StatusRequestEntityTooLarge, apiError.StatusCode)
+			require.True(t, types.IsSkipRetryError(apiError))
+		})
+	}
+}
+
 func TestAdaptorSendsConvertedMultipartEditAsJSON(t *testing.T) {
 	var receivedContentType string
 	var receivedBody []byte
@@ -176,7 +316,7 @@ func TestAdaptorSendsConvertedMultipartEditAsJSON(t *testing.T) {
 	require.NoError(t, writer.WriteField("prompt", "edit this"))
 	part, err := writer.CreateFormFile("image", "reference.png")
 	require.NoError(t, err)
-	_, err = part.Write([]byte("png-bytes"))
+	_, err = part.Write(mustEncodeAdvancedCustomTestImage(t, "png"))
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
@@ -235,4 +375,28 @@ func newAdvancedCustomTestContext(method string, path string, body io.Reader) (*
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(method, path, body)
 	return c, recorder
+}
+
+type advancedCustomRepeatingReader struct{}
+
+func (advancedCustomRepeatingReader) Read(data []byte) (int, error) {
+	for index := range data {
+		data[index] = 'a'
+	}
+	return len(data), nil
+}
+
+func mustEncodeAdvancedCustomTestImage(t *testing.T, format string) []byte {
+	t.Helper()
+	var data bytes.Buffer
+	imageData := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	switch format {
+	case "jpeg":
+		require.NoError(t, jpeg.Encode(&data, imageData, nil))
+	case "png":
+		require.NoError(t, png.Encode(&data, imageData))
+	default:
+		t.Fatalf("unsupported test image format %q", format)
+	}
+	return data.Bytes()
 }

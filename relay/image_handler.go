@@ -127,6 +127,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if request.N != nil {
 		imageN = *request.N
 	}
+	if actualImageN := common.GetContextKeyInt(c, constant.ContextKeyImageOutputCount); actualImageN > 0 && actualImageN <= dto.MaxImageN {
+		imageN = uint(actualImageN)
+	}
 
 	if usage.(*dto.Usage).TotalTokens == 0 {
 		usage.(*dto.Usage).TotalTokens = 1

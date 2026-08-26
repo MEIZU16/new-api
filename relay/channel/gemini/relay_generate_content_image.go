@@ -89,6 +89,7 @@ func GeminiGenerateContentImageHandler(c *gin.Context, info *relaycommon.RelayIn
 		)
 	}
 
+	common.SetContextKey(c, constant.ContextKeyImageOutputCount, len(openAIResponse.Data))
 	if info != nil && info.PriceData.UsePrice && len(openAIResponse.Data) <= dto.MaxImageN {
 		info.PriceData.AddOtherRatio("n", float64(len(openAIResponse.Data)))
 	}
