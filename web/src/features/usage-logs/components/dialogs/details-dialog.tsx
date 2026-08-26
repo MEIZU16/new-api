@@ -64,6 +64,7 @@ import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { UsageLog } from '../../data/schema'
+import { getFixedPriceBillingPresentation } from '../../lib/billing'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -258,11 +259,16 @@ function BillingBreakdown(props: {
       })
     }
   } else if (isPerCall) {
-    rows.push({ label: t('Billing Mode'), value: t('Per-call') })
+    const fixedPrice = getFixedPriceBillingPresentation(
+      log.model_name,
+      fmtPrice(other.model_price ?? 0),
+      t
+    )
+    rows.push({ label: t('Billing Mode'), value: fixedPrice.mode })
     if (other.model_price != null) {
       rows.push({
         label: t('Model Price'),
-        value: fmtPrice(other.model_price),
+        value: fixedPrice.price,
       })
     }
   } else {

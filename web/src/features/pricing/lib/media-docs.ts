@@ -16,12 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+export { isPerSecondMediaModel } from '@/lib/media-billing'
+
 export type MediaImageResolution = '1K' | '2K' | '4K'
 
 const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
-const PER_SECOND_MEDIA_MODELS = new Set(['omni-flash'])
-
 const PRO_IMAGE_ASPECT_RATIOS = [
   '1:1',
   '9:16',
@@ -42,11 +42,6 @@ const FLASH_IMAGE_ASPECT_RATIOS = [
   '8:1',
   '1:8',
 ] as const
-
-/** Return whether a public media SKU is billed by generated second. */
-export function isPerSecondMediaModel(modelName: string): boolean {
-  return PER_SECOND_MEDIA_MODELS.has(modelName.trim().toLowerCase())
-}
 
 /** Return the resolution tier encoded in one of this service's image SKUs. */
 export function mediaImageResolution(

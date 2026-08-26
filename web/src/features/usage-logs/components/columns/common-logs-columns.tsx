@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils'
 
 import { LOG_TYPE_ALL_VALUE } from '../../constants'
 import type { UsageLog } from '../../data/schema'
+import { getFixedPriceBillingPresentation } from '../../lib/billing'
 import {
   formatModelName,
   getTieredBillingSummary,
@@ -217,9 +218,12 @@ function buildTypeDetailSegments(
     const modelPrice = other.model_price
     const isPerCall = isPerCallBilling(modelPrice)
     if (isPerCall && modelPrice != null) {
-      segments.push({
-        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(modelPrice, priceOpts)}`,
-      })
+      const fixedPrice = getFixedPriceBillingPresentation(
+        log.model_name,
+        formatBillingCurrencyFromUSD(modelPrice, priceOpts),
+        t
+      )
+      segments.push({ text: fixedPrice.summary })
     } else if (other.model_ratio != null) {
       const inputPriceUSD = other.model_ratio * 2.0
       const baseEntries = [formatPriceCompact(inputPriceUSD)]
