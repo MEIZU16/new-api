@@ -21,7 +21,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/tidwall/sjson"
 )
 
 // ============================
@@ -290,6 +289,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if info.OriginModelName != "" {
 		dResp.Model = info.OriginModelName
 	}
+	if info.Action == constant.TaskActionRemix && strings.TrimSpace(info.OriginTaskID) != "" {
+		dResp.RemixedFromVideoID = info.OriginTaskID
+	} else {
+		dResp.RemixedFromVideoID = ""
+	}
 	c.JSON(http.StatusOK, dResp)
 	return upstreamID, responseBody, nil
 }
@@ -360,17 +364,19 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
-	data := task.Data
-	var err error
-	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
-		return nil, errors.Wrap(err, "set id failed")
+	var response responseTask
+	if err := common.Unmarshal(task.Data, &response); err != nil {
+		return nil, errors.Wrap(err, "unmarshal persisted video response failed")
 	}
-	// Polling responses are reconstructed from the persisted upstream payload,
-	// so restore the public SKU just as the creation response does.
+
+	// Reconstruct the polling response from the public response type instead of
+	// mutating the persisted upstream JSON. This keeps upstream task IDs,
+	// download URLs, signed URLs, and provider metadata out of the public API.
+	response.ID = task.TaskID
+	response.TaskID = task.TaskID
+	response.RemixedFromVideoID = ""
 	if publicModel := strings.TrimSpace(task.Properties.OriginModelName); publicModel != "" {
-		if data, err = sjson.SetBytes(data, "model", publicModel); err != nil {
-			return nil, errors.Wrap(err, "set model failed")
-		}
+		response.Model = publicModel
 	}
-	return data, nil
+	return common.Marshal(response)
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
@@ -120,7 +121,7 @@ func TestSoraBuildRequestBodyWritesResolvedMultipartDefaults(t *testing.T) {
 func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	upstream := `{"id":"video_internal","object":"video","model":"flow/omni","status":"processing"}`
+	upstream := `{"id":"video_internal","task_id":"video_internal_legacy","object":"video","model":"flow/omni","status":"processing","remixed_from_video_id":"video_internal_origin","url":"https://storage.example/video.mp4?signature=secret","download_url":"https://storage.example/download"}`
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(upstream))}
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "omni-flash",
@@ -138,22 +139,56 @@ func TestSoraDoResponseRestoresThePublicModelName(t *testing.T) {
 	assert.Equal(t, "task_public", response.ID)
 	assert.Equal(t, "task_public", response.TaskID)
 	assert.Equal(t, "omni-flash", response.Model)
+	assert.NotContains(t, recorder.Body.String(), "storage.example")
+	assert.NotContains(t, recorder.Body.String(), "download_url")
+	assert.NotContains(t, recorder.Body.String(), "video_internal_origin")
 }
 
-func TestSoraPollingRestoresThePublicModelName(t *testing.T) {
+func TestSoraDoResponseUsesPublicRemixOrigin(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	upstream := `{"id":"video_internal","object":"video","model":"flow/omni","status":"processing","remixed_from_video_id":"video_internal_origin"}`
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(upstream))}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "omni-flash",
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action:       constant.TaskActionRemix,
+			OriginTaskID: "task_origin_public",
+			PublicTaskID: "task_public",
+		},
+	}
+
+	_, _, taskErr := (&TaskAdaptor{}).DoResponse(c, resp, info)
+	require.Nil(t, taskErr)
+
+	var response responseTask
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, "task_origin_public", response.RemixedFromVideoID)
+	assert.NotContains(t, recorder.Body.String(), "video_internal_origin")
+}
+
+func TestSoraPollingUsesPublicResponseAllowlist(t *testing.T) {
 	task := &model.Task{
 		TaskID: "task_public",
 		Properties: model.Properties{
 			OriginModelName: "omni-flash",
 		},
-		Data: json.RawMessage(`{"id":"video_internal","object":"video","model":"flow/omni","status":"completed"}`),
+		Data: json.RawMessage(`{"id":"video_internal","task_id":"video_internal_legacy","object":"video","model":"flow/omni","status":"completed","remixed_from_video_id":"video_internal_origin","url":"https://storage.example/video.mp4?signature=secret","download_url":"https://storage.example/download","provider_metadata":{"bucket":"private"}}`),
 	}
 
 	data, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
 	require.NoError(t, err)
 
-	var response responseTask
+	var response map[string]any
 	require.NoError(t, json.Unmarshal(data, &response))
-	assert.Equal(t, "task_public", response.ID)
-	assert.Equal(t, "omni-flash", response.Model)
+	assert.Equal(t, "task_public", response["id"])
+	assert.Equal(t, "task_public", response["task_id"])
+	assert.Equal(t, "omni-flash", response["model"])
+	assert.Equal(t, "completed", response["status"])
+	assert.NotContains(t, response, "url")
+	assert.NotContains(t, response, "download_url")
+	assert.NotContains(t, response, "provider_metadata")
+	assert.NotContains(t, response, "remixed_from_video_id")
+	assert.NotContains(t, string(data), "storage.example")
+	assert.NotContains(t, string(data), "video_internal_origin")
 }
