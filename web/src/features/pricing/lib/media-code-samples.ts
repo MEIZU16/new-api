@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { isPromptOnlyImageModel } from './media-docs'
+import {
+  isGeminiImageModel,
+  isPromptOnlyImageModel,
+  mediaImageResolution,
+} from './media-docs'
 
 export type MediaSampleLanguage =
   | 'curl'
@@ -127,6 +131,370 @@ export function buildImageSample(
     `const data = await response.json()`,
     `await writeFile(`,
     `  '${outputFilename}',`,
+    `  Buffer.from(data.data[0].b64_json, 'base64')`,
+    `)`,
+  ].join('\n')
+}
+
+function geminiImageBody(
+  ctx: MediaSampleContext,
+  prompt: string,
+  referenceBase64?: string
+) {
+  return {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          ...(referenceBase64
+            ? [
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: referenceBase64,
+                  },
+                },
+              ]
+            : []),
+          { text: prompt },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: '16:9',
+        imageSize: mediaImageResolution(ctx.modelName) ?? '1K',
+      },
+    },
+  }
+}
+
+function buildGeminiImageRequestSample(
+  lang: MediaSampleLanguage,
+  ctx: MediaSampleContext,
+  withReference: boolean
+): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const prompt = withReference
+    ? 'Use the reference image composition and render it as a watercolor illustration.'
+    : 'A serene koi pond at sunset, rendered as a woodblock print.'
+  const outputFilename = withReference
+    ? 'edited-image.png'
+    : 'generated-image.png'
+  const body = geminiImageBody(
+    ctx,
+    prompt,
+    withReference ? '$REFERENCE_IMAGE_BASE64' : undefined
+  )
+  const bodyJSON = JSON.stringify(body, null, 2)
+
+  if (lang === 'curl') {
+    return [
+      ...(withReference
+        ? [`REFERENCE_IMAGE_BASE64=$(base64 < reference.png | tr -d '\\n')`, '']
+        : []),
+      `curl ${url} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  --data-binary @- > response.json <<JSON`,
+      bodyJSON,
+      'JSON',
+      '',
+      `jq -r '.candidates[0].content.parts[] | select(.inlineData) | .inlineData.data' response.json \\`,
+      `  | base64 --decode > ${outputFilename}`,
+    ].join('\n')
+  }
+  if (lang === 'python') {
+    return [
+      'from base64 import b64decode, b64encode',
+      'from pathlib import Path',
+      '',
+      'import requests',
+      '',
+      ...(withReference
+        ? [
+            'reference_base64 = b64encode(',
+            '    Path("reference.png").read_bytes()',
+            ').decode("ascii")',
+            '',
+          ]
+        : []),
+      'body = {',
+      '    "contents": [',
+      '        {',
+      '            "role": "user",',
+      '            "parts": [',
+      ...(withReference
+        ? [
+            '                {',
+            '                    "inlineData": {',
+            '                        "mimeType": "image/png",',
+            '                        "data": reference_base64,',
+            '                    }',
+            '                },',
+          ]
+        : []),
+      `                {"text": "${prompt}"},`,
+      '            ],',
+      '        }',
+      '    ],',
+      '    "generationConfig": {',
+      '        "responseModalities": ["IMAGE"],',
+      '        "imageConfig": {',
+      '            "aspectRatio": "16:9",',
+      `            "imageSize": "${mediaImageResolution(ctx.modelName) ?? '1K'}",`,
+      '        },',
+      '    },',
+      '}',
+      '',
+      'response = requests.post(',
+      `    "${url}",`,
+      '    headers={',
+      '        "Authorization": "Bearer <YOUR_API_KEY>",',
+      '        "Content-Type": "application/json",',
+      '    },',
+      '    json=body,',
+      ')',
+      'response.raise_for_status()',
+      '',
+      'parts = response.json()["candidates"][0]["content"]["parts"]',
+      'image = next(part["inlineData"] for part in parts if "inlineData" in part)',
+      `Path("${outputFilename}").write_bytes(b64decode(image["data"]))`,
+    ].join('\n')
+  }
+  if (lang === 'typescript') {
+    return [
+      `import { readFile, writeFile } from 'node:fs/promises'`,
+      '',
+      `const apiKey = process.env.${ctx.apiKeyEnv}`,
+      `if (!apiKey) throw new Error('${ctx.apiKeyEnv} is not set')`,
+      ...(withReference
+        ? [
+            `const referenceBase64 = (`,
+            `  await readFile('reference.png')`,
+            `).toString('base64')`,
+          ]
+        : []),
+      '',
+      `const response = await fetch('${url}', {`,
+      `  method: 'POST',`,
+      `  headers: {`,
+      `    Authorization: \`Bearer \${apiKey}\`,`,
+      `    'Content-Type': 'application/json',`,
+      `  },`,
+      `  body: JSON.stringify({`,
+      `    contents: [`,
+      `      {`,
+      `        role: 'user',`,
+      `        parts: [`,
+      ...(withReference
+        ? [
+            `          {`,
+            `            inlineData: {`,
+            `              mimeType: 'image/png',`,
+            `              data: referenceBase64,`,
+            `            },`,
+            `          },`,
+          ]
+        : []),
+      `          { text: '${prompt}' },`,
+      `        ],`,
+      `      },`,
+      `    ],`,
+      `    generationConfig: {`,
+      `      responseModalities: ['IMAGE'],`,
+      `      imageConfig: {`,
+      `        aspectRatio: '16:9',`,
+      `        imageSize: '${mediaImageResolution(ctx.modelName) ?? '1K'}',`,
+      `      },`,
+      `    },`,
+      `  }),`,
+      `})`,
+      `if (!response.ok) throw new Error(await response.text())`,
+      '',
+      `type GeminiPart = { inlineData?: { data: string; mimeType: string } }`,
+      `const data = (await response.json()) as {`,
+      `  candidates: Array<{ content: { parts: GeminiPart[] } }>`,
+      `}`,
+      `const image = data.candidates[0].content.parts.find(`,
+      `  (part) => part.inlineData`,
+      `)?.inlineData`,
+      `if (!image) throw new Error('Gemini returned no image')`,
+      `await writeFile('${outputFilename}', Buffer.from(image.data, 'base64'))`,
+    ].join('\n')
+  }
+  return [
+    `import { readFile, writeFile } from 'node:fs/promises'`,
+    ...(withReference
+      ? [
+          '',
+          `const referenceBase64 = (`,
+          `  await readFile('reference.png')`,
+          `).toString('base64')`,
+        ]
+      : []),
+    '',
+    `const response = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    'Content-Type': 'application/json',`,
+    `  },`,
+    `  body: JSON.stringify({`,
+    `    contents: [`,
+    `      {`,
+    `        role: 'user',`,
+    `        parts: [`,
+    ...(withReference
+      ? [
+          `          {`,
+          `            inlineData: {`,
+          `              mimeType: 'image/png',`,
+          `              data: referenceBase64,`,
+          `            },`,
+          `          },`,
+        ]
+      : []),
+    `          { text: '${prompt}' },`,
+    `        ],`,
+    `      },`,
+    `    ],`,
+    `    generationConfig: {`,
+    `      responseModalities: ['IMAGE'],`,
+    `      imageConfig: {`,
+    `        aspectRatio: '16:9',`,
+    `        imageSize: '${mediaImageResolution(ctx.modelName) ?? '1K'}',`,
+    `      },`,
+    `    },`,
+    `  }),`,
+    `})`,
+    `if (!response.ok) throw new Error(await response.text())`,
+    '',
+    `const data = await response.json()`,
+    `const image = data.candidates[0].content.parts.find(`,
+    `  (part) => part.inlineData`,
+    `)?.inlineData`,
+    `if (!image) throw new Error('Gemini returned no image')`,
+    `await writeFile('${outputFilename}', Buffer.from(image.data, 'base64'))`,
+  ].join('\n')
+}
+
+export function buildGeminiImageSample(
+  lang: MediaSampleLanguage,
+  ctx: MediaSampleContext
+): string {
+  return buildGeminiImageRequestSample(lang, ctx, false)
+}
+
+export function buildGeminiImageReferenceSample(
+  lang: MediaSampleLanguage,
+  ctx: MediaSampleContext
+): string {
+  return buildGeminiImageRequestSample(lang, ctx, true)
+}
+
+export function buildImageEditSample(
+  lang: MediaSampleLanguage,
+  ctx: MediaSampleContext
+): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath.replace(
+    /\/images\/generations\/?$/,
+    '/images/edits'
+  )}`
+  const prompt =
+    'Use the reference image composition and render it as a watercolor illustration.'
+
+  if (lang === 'curl') {
+    return [
+      `curl ${url} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -F "model=${ctx.modelName}" \\`,
+      `  -F "prompt=${prompt}" \\`,
+      `  -F "image=@reference.png"`,
+    ].join('\n')
+  }
+  if (lang === 'python') {
+    return [
+      'from base64 import b64decode',
+      'from pathlib import Path',
+      '',
+      'import requests',
+      '',
+      'with Path("reference.png").open("rb") as reference_image:',
+      '    response = requests.post(',
+      `        "${url}",`,
+      '        headers={"Authorization": "Bearer <YOUR_API_KEY>"},',
+      '        data={',
+      `            "model": "${ctx.modelName}",`,
+      `            "prompt": "${prompt}",`,
+      '        },',
+      '        files={',
+      '            "image": ("reference.png", reference_image, "image/png"),',
+      '        },',
+      '    )',
+      '',
+      'response.raise_for_status()',
+      'Path("edited-image.png").write_bytes(',
+      '    b64decode(response.json()["data"][0]["b64_json"])',
+      ')',
+    ].join('\n')
+  }
+  if (lang === 'typescript') {
+    return [
+      `import { readFile, writeFile } from 'node:fs/promises'`,
+      '',
+      `const apiKey = process.env.${ctx.apiKeyEnv}`,
+      `if (!apiKey) throw new Error('${ctx.apiKeyEnv} is not set')`,
+      `const referenceImage = await readFile('reference.png')`,
+      `const form = new FormData()`,
+      `form.set('model', '${ctx.modelName}')`,
+      `form.set('prompt', '${prompt}')`,
+      `form.set(`,
+      `  'image',`,
+      `  new Blob([referenceImage], { type: 'image/png' }),`,
+      `  'reference.png'`,
+      `)`,
+      '',
+      `const response = await fetch('${url}', {`,
+      `  method: 'POST',`,
+      `  headers: { Authorization: \`Bearer \${apiKey}\` },`,
+      `  body: form,`,
+      `})`,
+      `if (!response.ok) throw new Error(await response.text())`,
+      `const data = (await response.json()) as {`,
+      `  data: Array<{ b64_json: string }>`,
+      `}`,
+      `await writeFile(`,
+      `  'edited-image.png',`,
+      `  Buffer.from(data.data[0].b64_json, 'base64')`,
+      `)`,
+    ].join('\n')
+  }
+  return [
+    `import { readFile, writeFile } from 'node:fs/promises'`,
+    '',
+    `const referenceImage = await readFile('reference.png')`,
+    `const form = new FormData()`,
+    `form.set('model', '${ctx.modelName}')`,
+    `form.set('prompt', '${prompt}')`,
+    `form.set(`,
+    `  'image',`,
+    `  new Blob([referenceImage], { type: 'image/png' }),`,
+    `  'reference.png'`,
+    `)`,
+    '',
+    `const response = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `  },`,
+    `  body: form,`,
+    `})`,
+    `if (!response.ok) throw new Error(await response.text())`,
+    `const data = await response.json()`,
+    `await writeFile(`,
+    `  'edited-image.png',`,
     `  Buffer.from(data.data[0].b64_json, 'base64')`,
     `)`,
   ].join('\n')
@@ -305,6 +673,9 @@ export function buildMediaSample(
   endpointType: string,
   ctx: MediaSampleContext
 ): string | null {
+  if (endpointType === 'gemini' && isGeminiImageModel(ctx.modelName)) {
+    return buildGeminiImageSample(lang, ctx)
+  }
   if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
   if (endpointType === 'openai-video') return buildVideoSample(lang, ctx)
   return null

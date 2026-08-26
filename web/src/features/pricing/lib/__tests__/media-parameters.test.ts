@@ -58,17 +58,18 @@ describe('media API supported parameters', () => {
   ])(
     'shows the locked resolution and model-specific aspect ratios for %s',
     (modelName, resolution, aspectRatios) => {
-      const parameters = buildSupportedParameters(
-        model(modelName, ['image-generation'])
-      )
+      const parameters = buildSupportedParameters(model(modelName, ['gemini']))
 
       expect(parameters.map((parameter) => parameter.name)).toEqual([
-        'prompt',
-        'extra_fields.aspect_ratio',
+        'contents[].parts[].text',
+        'contents[].parts[].inlineData',
+        'generationConfig.imageConfig.aspectRatio',
       ])
-      expect(parameters[1]?.type).toBe('enum')
-      expect(parameters[1]?.enumValues).toEqual(aspectRatios)
-      expect(parameters[1]?.descriptionKey).toContain(resolution)
+      expect(parameters[1]?.type).toBe('object')
+      expect(parameters[1]?.descriptionKey).toContain('Base64')
+      expect(parameters[2]?.type).toBe('enum')
+      expect(parameters[2]?.enumValues).toEqual(aspectRatios)
+      expect(parameters[2]?.descriptionKey).toContain(resolution)
       expect(parameters.some((parameter) => parameter.name === 'style')).toBe(
         false
       )
@@ -78,7 +79,7 @@ describe('media API supported parameters', () => {
     }
   )
 
-  it('shows only the prompt for gpt-image-2', () => {
+  it('shows prompt generation and provider-native reference editing for gpt-image-2', () => {
     const parameters = buildSupportedParameters(
       model('gpt-image-2', ['image-generation'])
     )
@@ -88,6 +89,10 @@ describe('media API supported parameters', () => {
         name: 'prompt',
         type: 'string',
         required: true,
+      }),
+      expect.objectContaining({
+        name: 'image',
+        type: 'file',
       }),
     ])
   })
