@@ -64,11 +64,14 @@ describe('media API supported parameters', () => {
 
       expect(parameters.map((parameter) => parameter.name)).toEqual([
         'prompt',
+        'image',
         'extra_fields.aspect_ratio',
       ])
-      expect(parameters[1]?.type).toBe('enum')
-      expect(parameters[1]?.enumValues).toEqual(aspectRatios)
-      expect(parameters[1]?.descriptionKey).toContain(resolution)
+      expect(parameters[1]?.type).toBe('file')
+      expect(parameters[1]?.descriptionKey).toContain('/v1/images/edits')
+      expect(parameters[2]?.type).toBe('enum')
+      expect(parameters[2]?.enumValues).toEqual(aspectRatios)
+      expect(parameters[2]?.descriptionKey).toContain(resolution)
       expect(parameters.some((parameter) => parameter.name === 'style')).toBe(
         false
       )
@@ -78,7 +81,7 @@ describe('media API supported parameters', () => {
     }
   )
 
-  it('shows only the prompt for gpt-image-2', () => {
+  it('shows prompt generation and reference-image editing for gpt-image-2', () => {
     const parameters = buildSupportedParameters(
       model('gpt-image-2', ['image-generation'])
     )
@@ -88,6 +91,10 @@ describe('media API supported parameters', () => {
         name: 'prompt',
         type: 'string',
         required: true,
+      }),
+      expect.objectContaining({
+        name: 'image',
+        type: 'file',
       }),
     ])
   })

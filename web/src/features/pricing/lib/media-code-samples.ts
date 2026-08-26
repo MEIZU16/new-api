@@ -132,6 +132,119 @@ export function buildImageSample(
   ].join('\n')
 }
 
+export function buildImageEditSample(
+  lang: MediaSampleLanguage,
+  ctx: MediaSampleContext
+): string {
+  const endpointPath = ctx.endpointPath.replace(
+    /\/images\/generations\/?$/,
+    '/images/edits'
+  )
+  const url = `${ctx.baseUrl}${endpointPath}`
+  const prompt =
+    'Use the reference image composition and render it as a watercolor illustration.'
+  const outputFilename = isPromptOnlyImageModel(ctx.modelName)
+    ? 'edited-image.png'
+    : 'edited-image.jpg'
+
+  if (lang === 'curl') {
+    return [
+      `curl ${url} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -F "model=${ctx.modelName}" \\`,
+      `  -F "prompt=${prompt}" \\`,
+      `  -F "image=@reference.png"`,
+    ].join('\n')
+  }
+  if (lang === 'python') {
+    return [
+      'from base64 import b64decode',
+      'from pathlib import Path',
+      '',
+      'import requests',
+      '',
+      `with Path("reference.png").open("rb") as reference_image:`,
+      '    response = requests.post(',
+      `        "${url}",`,
+      '        headers={"Authorization": "Bearer <YOUR_API_KEY>"},',
+      '        data={',
+      `            "model": "${ctx.modelName}",`,
+      `            "prompt": "${prompt}",`,
+      '        },',
+      '        files={',
+      '            "image": ("reference.png", reference_image, "image/png"),',
+      '        },',
+      '    )',
+      '',
+      'response.raise_for_status()',
+      `Path("${outputFilename}").write_bytes(`,
+      '    b64decode(response.json()["data"][0]["b64_json"])',
+      ')',
+    ].join('\n')
+  }
+  if (lang === 'typescript') {
+    return [
+      `import { readFile, writeFile } from 'node:fs/promises'`,
+      '',
+      `const apiKey = process.env.${ctx.apiKeyEnv}`,
+      `if (!apiKey) throw new Error('${ctx.apiKeyEnv} is not set')`,
+      '',
+      `const referenceImage = await readFile('reference.png')`,
+      `const form = new FormData()`,
+      `form.set('model', '${ctx.modelName}')`,
+      `form.set('prompt', '${prompt}')`,
+      `form.set(`,
+      `  'image',`,
+      `  new Blob([referenceImage], { type: 'image/png' }),`,
+      `  'reference.png'`,
+      `)`,
+      '',
+      `const response = await fetch('${url}', {`,
+      `  method: 'POST',`,
+      `  headers: { Authorization: \`Bearer \${apiKey}\` },`,
+      `  body: form,`,
+      `})`,
+      `if (!response.ok) throw new Error(await response.text())`,
+      '',
+      `const data = (await response.json()) as {`,
+      `  data: Array<{ b64_json: string }>`,
+      `}`,
+      `await writeFile(`,
+      `  '${outputFilename}',`,
+      `  Buffer.from(data.data[0].b64_json, 'base64')`,
+      `)`,
+    ].join('\n')
+  }
+  return [
+    `import { readFile, writeFile } from 'node:fs/promises'`,
+    '',
+    `const referenceImage = await readFile('reference.png')`,
+    `const form = new FormData()`,
+    `form.set('model', '${ctx.modelName}')`,
+    `form.set('prompt', '${prompt}')`,
+    `form.set(`,
+    `  'image',`,
+    `  new Blob([referenceImage], { type: 'image/png' }),`,
+    `  'reference.png'`,
+    `)`,
+    '',
+    `const response = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `  },`,
+    `  body: form,`,
+    `})`,
+    `if (!response.ok) throw new Error(await response.text())`,
+    '',
+    `const data = await response.json()`,
+    `await writeFile(`,
+    `  '${outputFilename}',`,
+    `  Buffer.from(data.data[0].b64_json, 'base64')`,
+    `)`,
+  ].join('\n')
+}
+
 export function buildVideoSample(
   lang: MediaSampleLanguage,
   ctx: MediaSampleContext
