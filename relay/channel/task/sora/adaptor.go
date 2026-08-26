@@ -100,11 +100,86 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
+	if strings.TrimSpace(req.Operation) != "" && strings.TrimSpace(req.Mode) != "" {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("use either operation or mode, not both"),
+			"invalid_request",
+			http.StatusBadRequest,
+		)
+	}
 	req.Size = resolvedSoraSize(req)
 	req.Seconds = strconv.Itoa(resolvedSoraSeconds(req))
 	req.Duration = 0
+	info.Action = resolvedVideoAction(c, req)
 	c.Set("task_request", req)
 	return nil
+}
+
+// videoReferenceCount counts the reference images a create request carries.
+// The upstream Omni dialect accepts them as repeated multipart uploads, as a
+// reference array, or as the metadata frame URLs, and the count together with
+// any explicit mode is what distinguishes image-to-video from a start/end pair
+// or a multi-reference set.
+func videoReferenceCount(c *gin.Context, req relaycommon.TaskSubmitReq) int {
+	metadataURL := func(key string) string {
+		value, _ := req.Metadata[key].(string)
+		return strings.TrimSpace(value)
+	}
+	// A frame pair replaces every other reference upstream, so it is counted
+	// on its own. A half pair is left at one so the upstream rejection stays
+	// the single description of that mistake.
+	firstFrame := metadataURL("first_frame_url")
+	lastFrame := metadataURL("last_frame_url")
+	if firstFrame != "" || lastFrame != "" {
+		if firstFrame != "" && lastFrame != "" {
+			return 2
+		}
+		return 1
+	}
+
+	count := len(req.ReferenceImages)
+	if strings.TrimSpace(req.InputReference) != "" {
+		count++
+	}
+	if form, err := common.ParseMultipartFormReusable(c); err == nil {
+		count += len(form.File["input_reference"])
+	}
+	if count == 0 && metadataURL("img_url") != "" {
+		return 1
+	}
+	return count
+}
+
+// resolvedVideoAction labels the task the way the upstream operation reads it,
+// so an uploaded reference is not recorded as a text-to-video generation.
+// Validating the operation against the reference count stays upstream, which
+// owns that contract.
+func resolvedVideoAction(c *gin.Context, req relaycommon.TaskSubmitReq) string {
+	requested := strings.TrimSpace(req.Operation)
+	if requested == "" {
+		requested = strings.TrimSpace(req.Mode)
+	}
+	switch strings.ToLower(requested) {
+	case "t2v", "text_to_video":
+		return constant.TaskActionTextGenerate
+	case "i2v", "image_to_video":
+		return constant.TaskActionGenerate
+	case "start_end_frame":
+		return constant.TaskActionFirstTailGenerate
+	case "r2v", "reference_to_video":
+		return constant.TaskActionReferenceGenerate
+	}
+
+	switch count := videoReferenceCount(c, req); {
+	case count == 0:
+		return constant.TaskActionTextGenerate
+	case count == 1:
+		return constant.TaskActionGenerate
+	case count == 2:
+		return constant.TaskActionFirstTailGenerate
+	default:
+		return constant.TaskActionReferenceGenerate
+	}
 }
 
 func resolvedSoraSeconds(req relaycommon.TaskSubmitReq) int {

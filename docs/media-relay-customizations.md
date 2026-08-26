@@ -59,6 +59,61 @@ GET  /v1/videos/{task_id}/content
 
 视频内容必须通过 New API 的 `/content` 接口流式代理。创建和轮询响应通过公共响应类型重建，只保留任务 ID、公开模型名、状态、进度、时间、时长、尺寸和错误等公共字段；上游下载地址、签名地址、内部任务 ID 及供应商元数据不得透传给客户端。
 
+### 视频生成模式与参考图
+
+`omni-flash` 支持四种生成模式。模式由参考图数量推断，也可以用 `mode`（`t2v` / `i2v` / `r2v`）或 `operation`（`text_to_video` / `image_to_video` / `start_end_frame` / `reference_to_video`）显式指定。两者只能选其一，同时提供返回 HTTP 400。
+
+| 模式 | 参考图数量 | 显式取值 |
+| --- | --- | --- |
+| 文生视频 | 0 | `t2v` / `text_to_video` |
+| 首帧生视频 | 1 | `i2v` / `image_to_video` |
+| 首尾帧生视频 | 2 | `start_end_frame` |
+| 多参考生视频 | 1～7 | `r2v` / `reference_to_video` |
+
+两张参考图默认按首尾帧解释；要把两张图当作参考图集合，必须显式指定 `r2v`。
+
+参考图可以用重复的 `input_reference` 字段上传，顺序即上游读取顺序：
+
+```bash
+curl https://example.com/v1/videos \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -F "model=omni-flash" \
+  -F "prompt=Combine the referenced subjects into one scene." \
+  -F "seconds=4" \
+  -F "size=1280x720" \
+  -F "mode=r2v" \
+  -F "input_reference=@reference-1.png" \
+  -F "input_reference=@reference-2.png" \
+  -F "input_reference=@reference-3.png"
+```
+
+也可以传 URL。`input_reference` 接受裸 URL 字符串或 `{"image_url": ...}` 对象，`reference_images` 接受两种形态组成的数组：
+
+```bash
+curl https://example.com/v1/videos \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni-flash",
+    "prompt": "Combine the referenced subjects into one scene.",
+    "seconds": "4",
+    "size": "1280x720",
+    "reference_images": [
+      {"image_url": "https://example.com/a.png"},
+      {"image_url": "https://example.com/b.png"},
+      "https://example.com/c.png"
+    ]
+  }'
+```
+
+首尾帧另有一种 metadata 写法，`first_frame_url` 与 `last_frame_url` 必须成对出现，缺一返回 HTTP 400：
+
+```bash
+-F 'metadata={"first_frame_url":"https://example.com/a.png","last_frame_url":"https://example.com/b.png"}'
+```
+
+参考图字节限制为单张 32 MiB、上传合计 64 MiB。参考图数量与模式不匹配（例如 `i2v` 传两张图）在上游调用阶段返回 HTTP 400，不会静默丢弃多余的参考图。使用日志中的任务动作按实际模式记录，上传参考图的请求不再记成文生视频。
+
 ## 图片生成请求
 
 ### Gemini 图片生成

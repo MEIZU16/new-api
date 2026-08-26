@@ -866,16 +866,18 @@ type TaskRelayInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"`
-	Mode           string                 `json:"mode,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	Images         []string               `json:"images,omitempty"`
-	Size           string                 `json:"size,omitempty"`
-	Duration       int                    `json:"duration,omitempty"`
-	Seconds        string                 `json:"seconds,omitempty"`
-	InputReference string                 `json:"input_reference,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Prompt          string                 `json:"prompt"`
+	Model           string                 `json:"model,omitempty"`
+	Mode            string                 `json:"mode,omitempty"`
+	Operation       string                 `json:"operation,omitempty"`
+	Image           string                 `json:"image,omitempty"`
+	Images          []string               `json:"images,omitempty"`
+	Size            string                 `json:"size,omitempty"`
+	Duration        int                    `json:"duration,omitempty"`
+	Seconds         string                 `json:"seconds,omitempty"`
+	InputReference  string                 `json:"input_reference,omitempty"`
+	ReferenceImages []string               `json:"reference_images,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
@@ -886,11 +888,56 @@ func (t *TaskSubmitReq) HasImage() bool {
 	return len(t.Images) > 0
 }
 
+// TaskReferenceURLs decodes a reference image field into the URLs it carries.
+// Video providers disagree on the shape: a bare URL, an object holding
+// image_url, or an array mixing both. Rejecting a shape here would fail the
+// request before the upstream provider that understands it ever sees it.
+func TaskReferenceURLs(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var single string
+	if err := common.Unmarshal(raw, &single); err == nil {
+		if trimmed := strings.TrimSpace(single); trimmed != "" {
+			return []string{trimmed}
+		}
+		return nil
+	}
+
+	var object struct {
+		ImageURL string `json:"image_url"`
+		URL      string `json:"url"`
+	}
+	if err := common.Unmarshal(raw, &object); err == nil {
+		trimmed := strings.TrimSpace(object.ImageURL)
+		if trimmed == "" {
+			trimmed = strings.TrimSpace(object.URL)
+		}
+		if trimmed != "" {
+			return []string{trimmed}
+		}
+		return nil
+	}
+
+	var entries []json.RawMessage
+	if err := common.Unmarshal(raw, &entries); err != nil {
+		return nil
+	}
+	urls := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		urls = append(urls, TaskReferenceURLs(entry)...)
+	}
+	return urls
+}
+
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	type Alias TaskSubmitReq
 	aux := &struct {
-		Metadata json.RawMessage `json:"metadata,omitempty"`
-		Duration json.RawMessage `json:"duration,omitempty"`
+		Metadata        json.RawMessage `json:"metadata,omitempty"`
+		Duration        json.RawMessage `json:"duration,omitempty"`
+		InputReference  json.RawMessage `json:"input_reference,omitempty"`
+		ReferenceImages json.RawMessage `json:"reference_images,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(t),
@@ -899,6 +946,11 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	if err := common.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+
+	if inputReference := TaskReferenceURLs(aux.InputReference); len(inputReference) > 0 {
+		t.InputReference = inputReference[0]
+	}
+	t.ReferenceImages = TaskReferenceURLs(aux.ReferenceImages)
 
 	if len(aux.Duration) > 0 {
 		var durationInt int
