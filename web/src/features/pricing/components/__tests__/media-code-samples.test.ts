@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, it } from 'vitest'
 
 import {
-  buildImageEditSample,
   buildImageSample,
   buildMediaSample,
 } from '../../lib/media-code-samples'
@@ -84,38 +83,6 @@ describe('media API code samples', () => {
       expect(sample).not.toContain('size')
       expect(sample).not.toContain('n=')
       expect(sample).not.toContain('"n"')
-    }
-  )
-
-  it.each(['curl', 'python', 'typescript', 'javascript'] as const)(
-    'documents multipart reference-image uploads in the %s image sample',
-    (language) => {
-      const sample = buildImageEditSample(language, IMAGE_CONTEXT)
-
-      expect(sample).toContain('/v1/images/edits')
-      expect(sample).toContain('gemini-3-pro-image-4k')
-      expect(sample).toContain('prompt')
-      expect(sample).toContain('image')
-      expect(sample).toContain('reference.png')
-      if (language !== 'curl') {
-        expect(sample).toContain('b64_json')
-      }
-      expect(sample).not.toContain('response_format')
-      expect(sample).not.toContain('extra_fields')
-      expect(sample).not.toContain('aspect_ratio')
-      expect(sample).not.toContain('"n"')
-      expect(sample).not.toContain('n=')
-      expect(sample).not.toContain('quality')
-      expect(sample).not.toContain('size')
-      if (language === 'curl') {
-        expect(sample).toContain('-F "image=@reference.png"')
-        expect(sample).not.toContain('Content-Type')
-      } else if (language === 'python') {
-        expect(sample).toContain('files={')
-      } else {
-        expect(sample).toContain('FormData')
-        expect(sample).toContain('Blob')
-      }
     }
   )
 

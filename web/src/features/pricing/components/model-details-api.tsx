@@ -40,10 +40,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useStatus } from '@/hooks/use-status'
 
-import {
-  buildImageEditSample,
-  buildMediaSample,
-} from '../lib/media-code-samples'
+import { buildMediaSample } from '../lib/media-code-samples'
 import {
   buildRateLimits,
   buildSupportedParameters,
@@ -422,18 +419,13 @@ function CodeSamplesSection(props: {
     return null
   }
 
-  const sampleContext = {
+  const code = buildSample(lang, activeEndpoint.type, {
     baseUrl,
     apiKeyEnv: 'NEW_API_KEY',
     modelName: props.model.model_name || '',
     endpointType: activeEndpoint.type,
     endpointPath: activeEndpoint.path,
-  }
-  const code = buildSample(lang, activeEndpoint.type, sampleContext)
-  const imageEditCode =
-    activeEndpoint.type === 'image-generation'
-      ? buildImageEditSample(lang, sampleContext)
-      : null
+  })
 
   return (
     <section>
@@ -476,24 +468,6 @@ function CodeSamplesSection(props: {
           <CodeBlockCopyButton />
         </CodeBlock>
       </div>
-
-      {imageEditCode && (
-        <div className='mt-5'>
-          <div className='mb-2'>
-            <p className='text-sm font-medium'>
-              {t('Reference image request')}
-            </p>
-            <p className='text-muted-foreground mt-0.5 text-xs'>
-              {t(
-                'Send the reference image to /v1/images/edits as multipart/form-data using the image field.'
-              )}
-            </p>
-          </div>
-          <CodeBlock code={imageEditCode} language={LANG_HIGHLIGHT[lang]}>
-            <CodeBlockCopyButton />
-          </CodeBlock>
-        </div>
-      )}
 
       <p className='text-muted-foreground mt-2 text-xs'>
         {t('Replace')}{' '}

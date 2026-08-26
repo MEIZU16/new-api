@@ -510,7 +510,6 @@ export type SupportedParameter = {
     | 'object'
     | 'array'
     | 'enum'
-    | 'file'
   defaultValue?: string | number | boolean
   range?: string
   enumValues?: string[]
@@ -709,15 +708,7 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
     required: true,
     descriptionKey: 'Text description of the desired image',
   }
-  const referenceImageParameter: SupportedParameter = {
-    name: 'image',
-    type: 'file',
-    descriptionKey:
-      'Reference image file for /v1/images/edits (multipart/form-data)',
-  }
-  if (isPromptOnlyImageModel(model.model_name)) {
-    return [promptParameter, referenceImageParameter]
-  }
+  if (isPromptOnlyImageModel(model.model_name)) return [promptParameter]
 
   const resolution = mediaImageResolution(model.model_name)
   const aspectRatios = mediaImageAspectRatios(model.model_name)
@@ -727,7 +718,6 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
 
   return [
     promptParameter,
-    referenceImageParameter,
     {
       name: 'extra_fields.aspect_ratio',
       type: aspectRatios ? 'enum' : 'string',

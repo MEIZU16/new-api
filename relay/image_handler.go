@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -20,24 +19,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-func applyImageParamOverride(
-	request *dto.ImageRequest,
-	info *relaycommon.RelayInfo,
-) *types.NewAPIError {
-	requestJSON, err := common.Marshal(request)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	requestJSON, err = relaycommon.ApplyParamOverrideWithRelayInfo(requestJSON, info)
-	if err != nil {
-		return newAPIErrorFromParamOverride(err)
-	}
-	if err = common.Unmarshal(requestJSON, request); err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	return nil
-}
 
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
@@ -55,17 +36,6 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
-	}
-
-	// Multipart image edits are re-serialized by the OpenAI-compatible
-	// adaptor, so apply channel overrides to the parsed DTO before conversion.
-	// This keeps model-locked quality tiers effective for reference images.
-	if info.RelayMode == relayconstant.RelayModeImagesEdits &&
-		strings.Contains(strings.ToLower(c.Request.Header.Get("Content-Type")), "multipart/form-data") &&
-		len(info.ParamOverride) > 0 {
-		if overrideErr := applyImageParamOverride(request, info); overrideErr != nil {
-			return overrideErr
-		}
 	}
 
 	adaptor := GetAdaptor(info.ApiType)
