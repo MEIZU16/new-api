@@ -44,7 +44,7 @@ import {
   buildImageEditSample,
   buildMediaSample,
 } from '../lib/media-code-samples'
-import { isGeminiImageModel } from '../lib/media-docs'
+import { supportsReferenceImageEditing } from '../lib/media-docs'
 import {
   buildRateLimits,
   buildSupportedParameters,
@@ -433,7 +433,7 @@ function CodeSamplesSection(props: {
   const code = buildSample(lang, activeEndpoint.type, sampleContext)
   const referenceImageCode =
     activeEndpoint.type === 'image-generation' &&
-    isGeminiImageModel(props.model.model_name || '')
+    supportsReferenceImageEditing(props.model.model_name || '')
       ? buildImageEditSample(lang, sampleContext)
       : null
 

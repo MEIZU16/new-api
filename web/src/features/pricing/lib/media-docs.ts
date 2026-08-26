@@ -23,6 +23,7 @@ export type MediaImageResolution = '1K' | '2K' | '4K'
 const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
 const PROMPT_ONLY_IMAGE_MODELS = new Set(['gpt-image-2'])
+const REFERENCE_IMAGE_EDIT_MODELS = new Set(['gpt-image-2'])
 const PRO_IMAGE_ASPECT_RATIOS = [
   '1:1',
   '9:16',
@@ -49,9 +50,17 @@ export function isGeminiImageModel(modelName: string): boolean {
   return MEDIA_IMAGE_MODEL_PATTERN.test(modelName.trim())
 }
 
-/** Return whether public documentation should expose only the image prompt. */
+/** Return whether generation documentation should expose only the image prompt. */
 export function isPromptOnlyImageModel(modelName: string): boolean {
   return PROMPT_ONLY_IMAGE_MODELS.has(modelName.trim().toLowerCase())
+}
+
+/** Return whether public documentation should expose multipart image edits. */
+export function supportsReferenceImageEditing(modelName: string): boolean {
+  return (
+    isGeminiImageModel(modelName) ||
+    REFERENCE_IMAGE_EDIT_MODELS.has(modelName.trim().toLowerCase())
+  )
 }
 
 /** Return the resolution tier encoded in one of this service's image SKUs. */

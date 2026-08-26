@@ -142,6 +142,9 @@ export function buildImageEditSample(
   )}`
   const prompt =
     'Use the reference image composition and render it as a watercolor illustration.'
+  const outputFilename = isPromptOnlyImageModel(ctx.modelName)
+    ? 'edited-image.png'
+    : 'edited-image.jpg'
 
   if (lang === 'curl') {
     return [
@@ -173,7 +176,7 @@ export function buildImageEditSample(
       '    )',
       '',
       'response.raise_for_status()',
-      'Path("edited-image.jpg").write_bytes(',
+      `Path("${outputFilename}").write_bytes(`,
       '    b64decode(response.json()["data"][0]["b64_json"])',
       ')',
     ].join('\n')
@@ -204,7 +207,7 @@ export function buildImageEditSample(
       `  data: Array<{ b64_json: string }>`,
       `}`,
       `await writeFile(`,
-      `  'edited-image.jpg',`,
+      `  '${outputFilename}',`,
       `  Buffer.from(data.data[0].b64_json, 'base64')`,
       `)`,
     ].join('\n')
@@ -232,7 +235,7 @@ export function buildImageEditSample(
     `if (!response.ok) throw new Error(await response.text())`,
     `const data = await response.json()`,
     `await writeFile(`,
-    `  'edited-image.jpg',`,
+    `  '${outputFilename}',`,
     `  Buffer.from(data.data[0].b64_json, 'base64')`,
     `)`,
   ].join('\n')

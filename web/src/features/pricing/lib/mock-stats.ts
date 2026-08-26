@@ -21,6 +21,7 @@ import {
   isPromptOnlyImageModel,
   mediaImageAspectRatios,
   mediaImageResolution,
+  supportsReferenceImageEditing,
   type MediaImageResolution,
 } from './media-docs'
 import {
@@ -709,16 +710,8 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
     required: true,
     descriptionKey: 'Text description of the desired image',
   }
-  if (isPromptOnlyImageModel(model.model_name)) return [promptParameter]
-
-  const resolution = mediaImageResolution(model.model_name)
-  const aspectRatios = mediaImageAspectRatios(model.model_name)
-  const aspectRatioDescription = resolution
-    ? IMAGE_ASPECT_RATIO_DESCRIPTIONS[resolution]
-    : 'Output aspect ratio; defaults to 1:1'
-
   const parameters: SupportedParameter[] = [promptParameter]
-  if (resolution) {
+  if (supportsReferenceImageEditing(model.model_name)) {
     parameters.push({
       name: 'image',
       type: 'file',
@@ -726,6 +719,14 @@ function buildImageParameters(model: PricingModel): SupportedParameter[] {
         'Reference image file for /v1/images/edits (multipart/form-data)',
     })
   }
+  if (isPromptOnlyImageModel(model.model_name)) return parameters
+
+  const resolution = mediaImageResolution(model.model_name)
+  const aspectRatios = mediaImageAspectRatios(model.model_name)
+  const aspectRatioDescription = resolution
+    ? IMAGE_ASPECT_RATIO_DESCRIPTIONS[resolution]
+    : 'Output aspect ratio; defaults to 1:1'
+
   parameters.push({
     name: 'extra_fields.aspect_ratio',
     type: aspectRatios ? 'enum' : 'string',

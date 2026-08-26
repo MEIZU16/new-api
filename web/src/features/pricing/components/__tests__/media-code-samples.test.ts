@@ -32,7 +32,7 @@ const IMAGE_CONTEXT = {
   endpointPath: '/v1/images/generations',
 }
 
-const PROMPT_ONLY_IMAGE_CONTEXT = {
+const GPT_IMAGE_CONTEXT = {
   ...IMAGE_CONTEXT,
   modelName: 'gpt-image-2',
 }
@@ -92,7 +92,7 @@ describe('media API code samples', () => {
   it.each(['curl', 'python', 'typescript', 'javascript'] as const)(
     'shows only model and prompt in the %s gpt-image-2 request',
     (language) => {
-      const sample = buildImageSample(language, PROMPT_ONLY_IMAGE_CONTEXT)
+      const sample = buildImageSample(language, GPT_IMAGE_CONTEXT)
 
       expect(sample).toContain('gpt-image-2')
       expect(sample).toContain('prompt')
@@ -108,6 +108,25 @@ describe('media API code samples', () => {
       expect(sample).not.toContain('size')
       expect(sample).not.toContain('n=')
       expect(sample).not.toContain('"n"')
+    }
+  )
+
+  it.each(['curl', 'python', 'typescript', 'javascript'] as const)(
+    'uses OpenAI multipart edits for gpt-image-2 in the %s sample',
+    (language) => {
+      const sample = buildImageEditSample(language, GPT_IMAGE_CONTEXT)
+
+      expect(sample).toContain('/v1/images/edits')
+      expect(sample).toContain('gpt-image-2')
+      expect(sample).toContain('reference.png')
+      expect(sample).toContain('image')
+      expect(sample).not.toContain('extra_fields')
+      expect(sample).not.toContain('aspect_ratio')
+      expect(sample).not.toContain('response_format')
+      if (language !== 'curl') {
+        expect(sample).toContain('edited-image.png')
+        expect(sample).toContain('b64_json')
+      }
     }
   )
 

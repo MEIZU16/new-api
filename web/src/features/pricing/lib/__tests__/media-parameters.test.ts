@@ -81,7 +81,7 @@ describe('media API supported parameters', () => {
     }
   )
 
-  it('shows only the prompt for gpt-image-2', () => {
+  it('shows prompt generation and multipart reference-image editing for gpt-image-2', () => {
     const parameters = buildSupportedParameters(
       model('gpt-image-2', ['image-generation'])
     )
@@ -92,7 +92,17 @@ describe('media API supported parameters', () => {
         type: 'string',
         required: true,
       }),
+      expect.objectContaining({
+        name: 'image',
+        type: 'file',
+        descriptionKey: expect.stringContaining('/v1/images/edits'),
+      }),
     ])
+    expect(
+      parameters.some(
+        (parameter) => parameter.name === 'extra_fields.aspect_ratio'
+      )
+    ).toBe(false)
   })
 
   it('uses the actual omni-flash video fields instead of generic video fields', () => {
