@@ -64,6 +64,66 @@ func TestResetStatusCode(t *testing.T) {
 	}
 }
 
+func TestIsSafetyBlockedError(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		err      *types.NewAPIError
+		expected bool
+	}{
+		{
+			name: "provider moderation code",
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "request rejected",
+				Code:    "moderation_blocked",
+			}, http.StatusInternalServerError),
+			expected: true,
+		},
+		{
+			name: "normalized prompt blocked code",
+			err: types.NewOpenAIError(
+				fmt.Errorf("prompt rejected"),
+				types.ErrorCodePromptBlocked,
+				http.StatusForbidden,
+			),
+			expected: true,
+		},
+		{
+			name: "provider safety message",
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "Your request was rejected by the safety system.",
+				Code:    "unknown_error",
+			}, http.StatusBadGateway),
+			expected: true,
+		},
+		{
+			name: "transient moderation service failure",
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "moderation service unavailable",
+				Code:    "server_error",
+			}, http.StatusServiceUnavailable),
+			expected: false,
+		},
+		{
+			name: "authentication error",
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "invalid API key",
+				Code:    "invalid_api_key",
+			}, http.StatusUnauthorized),
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.expected, IsSafetyBlockedError(tc.err))
+		})
+	}
+}
+
 func TestRelayErrorHandlerTruncatesInvalidJSONBodyInLog(t *testing.T) {
 	withDebugEnabled(t, false)
 

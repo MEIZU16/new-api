@@ -18,6 +18,45 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
+var safetyBlockErrorCodes = map[types.ErrorCode]struct{}{
+	types.ErrorCodePromptBlocked:                 {},
+	types.ErrorCode("moderation_blocked"):        {},
+	types.ErrorCode("content_policy_violation"):  {},
+	types.ErrorCode("content_moderation_failed"): {},
+	types.ErrorCode("safety_blocked"):            {},
+	types.ErrorCode("safety_policy_violation"):   {},
+}
+
+var safetyBlockMessageMarkers = []string{
+	"rejected by the safety system",
+	"blocked by the safety system",
+	"blocked by safety",
+	"prompt was blocked",
+	"prompt is blocked",
+	"content policy violation",
+	"content_policy_violation",
+	"moderation blocked",
+}
+
+// IsSafetyBlockedError identifies provider safety-policy rejections so the
+// original prompt is not resent to another channel during automatic retry.
+func IsSafetyBlockedError(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	code := types.ErrorCode(strings.ToLower(strings.TrimSpace(string(err.GetErrorCode()))))
+	if _, ok := safetyBlockErrorCodes[code]; ok {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	for _, marker := range safetyBlockMessageMarkers {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func MidjourneyErrorWrapper(code int, desc string) *taskdto.MidjourneyResponse {
 	return &taskdto.MidjourneyResponse{
 		Code:        code,
