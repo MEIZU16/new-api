@@ -26,6 +26,10 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeJinaRerank:            {Path: "/v1/rerank", Method: "POST"},
 	constant.EndpointTypeImageGeneration:       {Path: "/v1/images/generations", Method: "POST"},
 	constant.EndpointTypeEmbeddings:            {Path: "/v1/embeddings", Method: "POST"},
+	// The video task API also exposes GET /v1/videos/{task_id} and its
+	// /content route, but the create call is the entry point clients start
+	// from and the only one the pricing map can carry.
+	constant.EndpointTypeOpenAIVideo: {Path: "/v1/videos", Method: "POST"},
 }
 
 // GetDefaultEndpointInfo 返回指定端点类型的默认信息以及是否存在
