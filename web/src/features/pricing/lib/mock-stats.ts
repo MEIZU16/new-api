@@ -22,6 +22,7 @@ import {
   mediaImageAspectRatios,
   mediaImageResolution,
   supportsReferenceImageEditing,
+  supportsVideoReferenceModes,
   type MediaImageResolution,
 } from './media-docs'
 import {
@@ -757,6 +758,24 @@ const VIDEO_PARAMS: SupportedParameter[] = [
   },
 ]
 
+// Reference images travel as repeated multipart parts, so these two fields
+// only exist on the multipart create request, never in the JSON body.
+const VIDEO_REFERENCE_PARAMS: SupportedParameter[] = [
+  {
+    name: 'mode',
+    type: 'enum',
+    enumValues: ['t2v', 'i2v', 'r2v'],
+    descriptionKey:
+      'Generation mode; inferred from the number of reference images when omitted',
+  },
+  {
+    name: 'input_reference',
+    type: 'file',
+    descriptionKey:
+      'Reference image for multipart/form-data create requests; repeat the field to send several',
+  },
+]
+
 type ApiCategory = 'reasoning' | 'embedding' | 'image' | 'video' | 'chat'
 
 /**
@@ -791,7 +810,11 @@ export function buildSupportedParameters(
   if (cat === 'reasoning') return REASONING_PARAMS
   if (cat === 'embedding') return EMBEDDING_PARAMS
   if (cat === 'image') return buildImageParameters(model)
-  if (cat === 'video') return VIDEO_PARAMS
+  if (cat === 'video') {
+    return supportsVideoReferenceModes(model.model_name)
+      ? [...VIDEO_PARAMS, ...VIDEO_REFERENCE_PARAMS]
+      : VIDEO_PARAMS
+  }
   return COMMON_CHAT_PARAMS
 }
 

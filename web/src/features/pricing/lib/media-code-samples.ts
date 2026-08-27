@@ -241,29 +241,83 @@ export function buildImageEditSample(
   ].join('\n')
 }
 
+/**
+ * The three video generation modes the public documentation covers. The
+ * upstream mode is otherwise inferred from how many reference images arrive,
+ * so each sample names it explicitly instead of relying on that inference.
+ */
+export type VideoSampleMode = 't2v' | 'i2v' | 'r2v'
+
+/**
+ * Prompt and reference filenames per mode. Only the create request differs
+ * between modes; polling and downloading are identical, so the samples share
+ * that half rather than repeating it three times per language.
+ */
+const VIDEO_SAMPLE_SHAPES: Record<
+  VideoSampleMode,
+  { prompt: string; references: string[] }
+> = {
+  t2v: {
+    prompt: 'A paper boat sailing through a neon city in the rain.',
+    references: [],
+  },
+  i2v: {
+    prompt: 'Animate the reference image with a slow push-in as rain starts.',
+    references: ['reference.png'],
+  },
+  r2v: {
+    prompt: 'Bring every referenced subject together in one neon street scene.',
+    references: ['reference-1.png', 'reference-2.png', 'reference-3.png'],
+  },
+}
+
+const VIDEO_SAMPLE_SECONDS = '6'
+const VIDEO_SAMPLE_SIZE = '1280x720'
+
 export function buildVideoSample(
   lang: MediaSampleLanguage,
-  ctx: MediaSampleContext
+  ctx: MediaSampleContext,
+  mode: VideoSampleMode = 't2v'
 ): string {
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
-  const prompt = 'A paper boat sailing through a neon city in the rain.'
+  const shape = VIDEO_SAMPLE_SHAPES[mode]
+  const references = shape.references
+  const isMultipart = references.length > 0
   const body = JSON.stringify(
     {
       model: ctx.modelName,
-      prompt,
-      seconds: '6',
-      size: '1280x720',
+      prompt: shape.prompt,
+      seconds: VIDEO_SAMPLE_SECONDS,
+      size: VIDEO_SAMPLE_SIZE,
     },
     null,
     2
   )
 
   if (lang === 'curl') {
+    const jsonArgs = [
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}"`,
+      `  -H "Content-Type: application/json"`,
+      `  -d '${body.replaceAll('\n', '\n     ')}'`,
+    ]
+    const multipartArgs = [
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}"`,
+      `  -F "model=${ctx.modelName}"`,
+      `  -F "prompt=${shape.prompt}"`,
+      `  -F "seconds=${VIDEO_SAMPLE_SECONDS}"`,
+      `  -F "size=${VIDEO_SAMPLE_SIZE}"`,
+      `  -F "mode=${mode}"`,
+      // Repeating the field is what carries an ordered reference set; an
+      // indexed or comma-joined field would collapse to a single reference.
+      ...references.map((name) => `  -F "input_reference=@${name}"`),
+    ]
+    const createArgs = isMultipart ? multipartArgs : jsonArgs
+    const createCommand = [
+      `VIDEO=$(curl --fail-with-body --silent --show-error ${url}`,
+      ...createArgs,
+    ].join(' \\\n')
     return [
-      `VIDEO=$(curl --fail-with-body --silent --show-error ${url} \\`,
-      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -d '${body.replaceAll('\n', '\n     ')}')`,
+      `${createCommand})`,
       `printf '%s\\n' "$VIDEO" | jq`,
       `VIDEO_ID=$(printf '%s' "$VIDEO" | jq -r '.id')`,
       '',
@@ -287,6 +341,39 @@ export function buildVideoSample(
     ].join('\n')
   }
   if (lang === 'python') {
+    const jsonCreate = [
+      'response = requests.post(',
+      '    videos_url,',
+      '    headers=headers,',
+      '    json={',
+      `        "model": "${ctx.modelName}",`,
+      `        "prompt": "${shape.prompt}",`,
+      `        "seconds": "${VIDEO_SAMPLE_SECONDS}",`,
+      `        "size": "${VIDEO_SAMPLE_SIZE}",`,
+      '    },',
+      ')',
+    ]
+    const multipartCreate = [
+      'references = [',
+      ...references.map(
+        (name) =>
+          `    ("input_reference", ("${name}", Path("${name}").read_bytes(), "image/png")),`
+      ),
+      ']',
+      '',
+      'response = requests.post(',
+      '    videos_url,',
+      '    headers=headers,',
+      '    data={',
+      `        "model": "${ctx.modelName}",`,
+      `        "prompt": "${shape.prompt}",`,
+      `        "seconds": "${VIDEO_SAMPLE_SECONDS}",`,
+      `        "size": "${VIDEO_SAMPLE_SIZE}",`,
+      `        "mode": "${mode}",`,
+      '    },',
+      '    files=references,',
+      ')',
+    ]
     return [
       'import time',
       'from pathlib import Path',
@@ -296,16 +383,7 @@ export function buildVideoSample(
       `videos_url = "${url}"`,
       'headers = {"Authorization": "Bearer <YOUR_API_KEY>"}',
       '',
-      'response = requests.post(',
-      '    videos_url,',
-      '    headers=headers,',
-      '    json={',
-      `        "model": "${ctx.modelName}",`,
-      `        "prompt": "${prompt}",`,
-      '        "seconds": "6",',
-      '        "size": "1280x720",',
-      '    },',
-      ')',
+      ...(isMultipart ? multipartCreate : jsonCreate),
       'response.raise_for_status()',
       'video = response.json()',
       '',
@@ -327,9 +405,44 @@ export function buildVideoSample(
       'Path("generated-video.mp4").write_bytes(response.content)',
     ].join('\n')
   }
+
+  const fsImport = isMultipart
+    ? `import { readFile, writeFile } from 'node:fs/promises'`
+    : `import { writeFile } from 'node:fs/promises'`
+  const jsonCreate = [
+    `let response = await fetch(videosUrl, {`,
+    `  method: 'POST',`,
+    `  headers: { ...headers, 'Content-Type': 'application/json' },`,
+    `  body: JSON.stringify(${body}),`,
+    `})`,
+  ]
+  const multipartCreate = [
+    `const form = new FormData()`,
+    `form.set('model', '${ctx.modelName}')`,
+    `form.set('prompt', '${shape.prompt}')`,
+    `form.set('seconds', '${VIDEO_SAMPLE_SECONDS}')`,
+    `form.set('size', '${VIDEO_SAMPLE_SIZE}')`,
+    `form.set('mode', '${mode}')`,
+    // append, not set: repeated parts are what make an ordered reference set.
+    `for (const name of [${references.map((n) => `'${n}'`).join(', ')}]) {`,
+    `  form.append(`,
+    `    'input_reference',`,
+    `    new Blob([await readFile(name)], { type: 'image/png' }),`,
+    `    name`,
+    `  )`,
+    `}`,
+    '',
+    `let response = await fetch(videosUrl, {`,
+    `  method: 'POST',`,
+    `  headers,`,
+    `  body: form,`,
+    `})`,
+  ]
+  const createBlock = isMultipart ? multipartCreate : jsonCreate
+
   if (lang === 'typescript') {
     return [
-      `import { writeFile } from 'node:fs/promises'`,
+      fsImport,
       '',
       `type VideoTask = {`,
       `  id: string`,
@@ -340,16 +453,9 @@ export function buildVideoSample(
       `const apiKey = process.env.${ctx.apiKeyEnv}`,
       `if (!apiKey) throw new Error('${ctx.apiKeyEnv} is not set')`,
       `const videosUrl = '${url}'`,
-      `const headers = {`,
-      `  Authorization: \`Bearer \${apiKey}\`,`,
-      `  'Content-Type': 'application/json',`,
-      `}`,
+      `const headers = { Authorization: \`Bearer \${apiKey}\` }`,
       '',
-      `let response = await fetch(videosUrl, {`,
-      `  method: 'POST',`,
-      `  headers,`,
-      `  body: JSON.stringify(${body}),`,
-      `})`,
+      ...createBlock,
       `if (!response.ok) throw new Error(await response.text())`,
       `let video = (await response.json()) as VideoTask`,
       '',
@@ -373,19 +479,14 @@ export function buildVideoSample(
     ].join('\n')
   }
   return [
-    `import { writeFile } from 'node:fs/promises'`,
+    fsImport,
     '',
     `const videosUrl = '${url}'`,
     `const headers = {`,
     `  Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
-    `  'Content-Type': 'application/json',`,
     `}`,
     '',
-    `let response = await fetch(videosUrl, {`,
-    `  method: 'POST',`,
-    `  headers,`,
-    `  body: JSON.stringify(${body}),`,
-    `})`,
+    ...createBlock,
     `if (!response.ok) throw new Error(await response.text())`,
     `let video = await response.json()`,
     '',

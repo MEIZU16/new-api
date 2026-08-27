@@ -114,8 +114,24 @@ describe('media API supported parameters', () => {
       'prompt',
       'seconds',
       'size',
+      'mode',
+      'input_reference',
     ])
     expect(parameters[1]?.enumValues).toEqual(['4', '6', '8', '10'])
     expect(parameters[2]?.enumValues).toEqual(['1280x720', '720x1280'])
+    expect(parameters[3]?.enumValues).toEqual(['t2v', 'i2v', 'r2v'])
+    expect(parameters[4]?.type).toBe('file')
+  })
+
+  it('hides the reference-mode fields from video models that do not accept them', () => {
+    const parameters = buildSupportedParameters(
+      model('sora-2', ['openai-video'])
+    )
+
+    expect(parameters.map((parameter) => parameter.name)).toEqual([
+      'prompt',
+      'seconds',
+      'size',
+    ])
   })
 })

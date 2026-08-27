@@ -43,8 +43,13 @@ import { useStatus } from '@/hooks/use-status'
 import {
   buildImageEditSample,
   buildMediaSample,
+  buildVideoSample,
 } from '../lib/media-code-samples'
-import { supportsReferenceImageEditing } from '../lib/media-docs'
+import {
+  MAX_VIDEO_REFERENCE_IMAGES,
+  supportsReferenceImageEditing,
+  supportsVideoReferenceModes,
+} from '../lib/media-docs'
 import {
   buildRateLimits,
   buildSupportedParameters,
@@ -436,6 +441,11 @@ function CodeSamplesSection(props: {
     supportsReferenceImageEditing(props.model.model_name || '')
       ? buildImageEditSample(lang, sampleContext)
       : null
+  // Video SKUs that accept reference images document all three create shapes,
+  // because the mode is otherwise only discoverable from the parameter table.
+  const showVideoModes =
+    activeEndpoint.type === 'openai-video' &&
+    supportsVideoReferenceModes(props.model.model_name || '')
 
   return (
     <section>
@@ -474,27 +484,50 @@ function CodeSamplesSection(props: {
       </div>
 
       <div className='mt-3'>
+        {showVideoModes ? (
+          <SampleBlockHeading
+            title={t('Text-to-video request')}
+            description={t(
+              'Send a prompt on its own; with no reference image attached the request is generated as text-to-video.'
+            )}
+          />
+        ) : null}
         <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
           <CodeBlockCopyButton />
         </CodeBlock>
       </div>
 
       {referenceImageCode ? (
-        <div className='mt-5'>
-          <div className='mb-2'>
-            <p className='text-sm font-medium'>
-              {t('Reference image request')}
-            </p>
-            <p className='text-muted-foreground mt-0.5 text-xs'>
-              {t(
-                'Send the reference image to /v1/images/edits as multipart/form-data using the image field.'
-              )}
-            </p>
-          </div>
-          <CodeBlock code={referenceImageCode} language={LANG_HIGHLIGHT[lang]}>
-            <CodeBlockCopyButton />
-          </CodeBlock>
-        </div>
+        <ExtraSampleBlock
+          title={t('Reference image request')}
+          description={t(
+            'Send the reference image to /v1/images/edits as multipart/form-data using the image field.'
+          )}
+          code={referenceImageCode}
+          language={LANG_HIGHLIGHT[lang]}
+        />
+      ) : null}
+
+      {showVideoModes ? (
+        <>
+          <ExtraSampleBlock
+            title={t('Image-to-video request')}
+            description={t(
+              'Upload one image as input_reference using multipart/form-data so the video opens on that frame.'
+            )}
+            code={buildVideoSample(lang, sampleContext, 'i2v')}
+            language={LANG_HIGHLIGHT[lang]}
+          />
+          <ExtraSampleBlock
+            title={t('Multi-reference video request')}
+            description={t(
+              'Repeat input_reference for up to {{max}} images and set mode=r2v so they are read as one reference set instead of a start and end frame.',
+              { max: MAX_VIDEO_REFERENCE_IMAGES }
+            )}
+            code={buildVideoSample(lang, sampleContext, 'r2v')}
+            language={LANG_HIGHLIGHT[lang]}
+          />
+        </>
       ) : null}
 
       <p className='text-muted-foreground mt-2 text-xs'>
@@ -505,6 +538,33 @@ function CodeSamplesSection(props: {
         {t('with the API key from your token settings.')}
       </p>
     </section>
+  )
+}
+
+function SampleBlockHeading(props: { title: string; description: string }) {
+  return (
+    <div className='mb-2'>
+      <p className='text-sm font-medium'>{props.title}</p>
+      <p className='text-muted-foreground mt-0.5 text-xs'>
+        {props.description}
+      </p>
+    </div>
+  )
+}
+
+function ExtraSampleBlock(props: {
+  title: string
+  description: string
+  code: string
+  language: BundledLanguage
+}) {
+  return (
+    <div className='mt-5'>
+      <SampleBlockHeading title={props.title} description={props.description} />
+      <CodeBlock code={props.code} language={props.language}>
+        <CodeBlockCopyButton />
+      </CodeBlock>
+    </div>
   )
 }
 

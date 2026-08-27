@@ -57,6 +57,8 @@ GET  /v1/videos/{task_id}
 GET  /v1/videos/{task_id}/content
 ```
 
+创建请求接受 `application/json` 和 `multipart/form-data` 两种形态；上传参考图必须使用 `multipart/form-data`。`seconds` 只接受 `4`、`6`、`8`、`10`；`size` 只接受 `1280x720` 和 `720x1280`，省略时按 `720x1280` 计费和生成。
+
 视频内容必须通过 New API 的 `/content` 接口流式代理。创建和轮询响应通过公共响应类型重建，只保留任务 ID、公开模型名、状态、进度、时间、时长、尺寸和错误等公共字段；上游下载地址、签名地址、内部任务 ID 及供应商元数据不得透传给客户端。
 
 ### 视频生成模式与参考图
@@ -71,6 +73,39 @@ GET  /v1/videos/{task_id}/content
 | 多参考生视频 | 1～7 | `r2v` / `reference_to_video` |
 
 两张参考图默认按首尾帧解释；要把两张图当作参考图集合，必须显式指定 `r2v`。
+
+#### 文生视频（t2v）
+
+不带参考图，只发送 `prompt`。没有参考图时模式即推断为文生视频，`mode` 可以省略：
+
+```bash
+curl https://example.com/v1/videos \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni-flash",
+    "prompt": "A paper boat sailing through a neon city in the rain.",
+    "seconds": "6",
+    "size": "1280x720"
+  }'
+```
+
+#### 图生视频（i2v）
+
+用 `multipart/form-data` 上传一张 `input_reference`，视频以该画面作为首帧：
+
+```bash
+curl https://example.com/v1/videos \
+  -H "Authorization: Bearer $NEW_API_KEY" \
+  -F "model=omni-flash" \
+  -F "prompt=Animate the reference image with a slow push-in as rain starts." \
+  -F "seconds=6" \
+  -F "size=1280x720" \
+  -F "mode=i2v" \
+  -F "input_reference=@reference.png"
+```
+
+#### 多参考生视频（r2v）
 
 参考图可以用重复的 `input_reference` 字段上传，顺序即上游读取顺序：
 
@@ -364,6 +399,16 @@ openai_images_to_gemini_generate_content
 - Gemini 非 cURL 编辑示例按当前文档约定保存为 JPEG；
 - 不向用户展示上游专用请求字段。
 
+`omni-flash` 详情页按生成模式分成三段示例，每段都覆盖 cURL、Python、TypeScript 和 JavaScript，并且都是从创建、轮询到 `/content` 下载的完整流程：
+
+- 文生视频：JSON 创建请求，不含 `mode` 和 `input_reference`；
+- 图生视频：`multipart/form-data` 创建请求，`mode=i2v` 加一张 `input_reference`；
+- 多参考生视频：`multipart/form-data` 创建请求，`mode=r2v` 加重复的 `input_reference` 字段。
+
+参考图示例必须使用重复字段而不是覆盖式赋值（cURL 重复 `-F`，Python 重复元组，浏览器端使用 `FormData.append`），否则复制出去的代码会把参考图集合压缩成一张图。参考图创建示例不携带 `application/json` 内容类型。
+
+`mode` 和 `input_reference` 只在支持参考图的视频 SKU 的参数表中展示，其它视频模型的参数表保持 `prompt`、`seconds`、`size` 三项。
+
 相关前端实现位于：
 
 ```text
@@ -433,7 +478,10 @@ service/task_polling.go
 - Gemini 实际输出数量上下文；
 - 安全拦截不重试；
 - `n > 4` 在上游调用前返回 HTTP 400；
-- Sora 视频轮询的公共任务 ID、公开模型名和上游字段剥离。
+- Sora 视频轮询的公共任务 ID、公开模型名和上游字段剥离；
+- `omni-flash` 三种生成模式的示例代码：图生视频只带一张参考图、多参考生视频带齐三张参考图、默认示例不含 `mode` 和 `input_reference`；
+- 参考图示例在四种语言中都使用重复字段而不是覆盖式赋值，且不携带 `application/json` 内容类型；
+- `mode` 和 `input_reference` 只出现在支持参考图的视频模型参数表中。
 
 `/v1/videos/{task_id}/content` 的鉴权、所有权校验、响应头和流式传输当前主要由实现审查与生产验收保证；本节不宣称已有完整的内容代理自动化测试覆盖。
 
@@ -469,6 +517,18 @@ bun run build
 
 模型成功返回一张 1024×1024 图片，并按要求保留五种形状、颜色和排列顺序。这证明当前网关不会在第 5 张参考图处触发人为数量限制，同时仍执行单张和合计字节保护。
 
+视频三种模式在本地网关对接 Omni 上游完成验收，公开模型名为 `omni-flash`：
+
+| 模式 | 请求形态 | 记录动作 | 上游 operation | 结果 |
+| --- | --- | --- | --- | --- |
+| 文生视频 | JSON，无参考图 | `textGenerate` | `text_to_video` | 1280×720，4 秒 |
+| 图生视频 | multipart，1 张 `input_reference` | `generate` | `image_to_video` | 1280×720，4 秒 |
+| 多参考生视频 | multipart，`mode=r2v` 加 3 张 `input_reference` | `referenceGenerate` | `reference_to_video` | 1280×720，4 秒 |
+
+三个任务都通过 `/v1/videos/{task_id}/content` 取回视频；多参考生视频的成片同时包含三张参考图中的全部图形，说明重复的 `input_reference` 字段没有被丢弃。文档中的 `mode=i2v` 加 `seconds=6` 形态另行验收，产出 6 秒 1280×720 视频，按 6 秒计费。
+
+计费按秒线性：4 秒任务与 6 秒任务的 quota 之比等于时长之比，使用日志按实际动作而不是统一按文生视频记录。`mode` 与 `operation` 同时提供返回 HTTP 400，声明 `i2v` 却上传两张参考图由上游返回 HTTP 400，两种情况都不扣费。
+
 ## 变更记录
 
 | 提交 | 说明 |
@@ -477,7 +537,8 @@ bun run build
 | `8c7507a0` | 增加参考图字节、MIME、multipart 内存和 Gemini 实际输出数量保护 |
 | `15fab62a` | 为 `gpt-image-2` 启用并记录参考图编辑文档 |
 | `63600237` | 删除人为添加的 Gemini 参考图 4 张固定上限 |
-| 当前变更 | 增加维护文档，并将 Sora 轮询响应改为公共字段白名单 |
+| `0342b9a2` | 把多参考视频请求透传到 Omni 上游 |
+| 当前变更 | 增加维护文档，将 Sora 轮询响应改为公共字段白名单，并为 `omni-flash` 补齐三种生成模式的用户文档 |
 
 `8c7507a0` 中曾加入的参考图数量上限已经由 `63600237` 删除；单张 16 MiB、合计 32 MiB、真实字节 MIME 检测和不可重试错误策略继续保留。
 

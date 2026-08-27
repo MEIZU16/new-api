@@ -22,6 +22,7 @@ import {
   buildImageEditSample,
   buildImageSample,
   buildMediaSample,
+  buildVideoSample,
 } from '../../lib/media-code-samples'
 
 const IMAGE_CONTEXT = {
@@ -145,10 +146,104 @@ describe('media API code samples', () => {
     }
   )
 
+  it.each(['curl', 'python', 'typescript', 'javascript'] as const)(
+    'keeps the default %s video sample free of reference fields',
+    (language) => {
+      const sample = buildMediaSample(language, 'openai-video', VIDEO_CONTEXT)
+
+      expect(sample).not.toContain('input_reference')
+      // Word-bounded so the `model` field does not count as a `mode` field.
+      expect(sample).not.toMatch(/\bmode\b/)
+    }
+  )
+
   it('uses the OpenAI video status name in the TypeScript task type', () => {
     const sample = buildMediaSample('typescript', 'openai-video', VIDEO_CONTEXT)
 
     expect(sample).toContain("'in_progress'")
     expect(sample).not.toContain("'processing'")
   })
+})
+
+describe('video reference-mode samples', () => {
+  const LANGUAGES = ['curl', 'python', 'typescript', 'javascript'] as const
+
+  it.each(LANGUAGES)(
+    'sends a single named reference in the %s image-to-video sample',
+    (language) => {
+      const sample = buildVideoSample(language, VIDEO_CONTEXT, 'i2v')
+
+      expect(sample).toContain('input_reference')
+      expect(sample).toContain('reference.png')
+      expect(sample).toContain('i2v')
+      expect(sample).not.toContain('reference-2.png')
+    }
+  )
+
+  it.each(LANGUAGES)(
+    'carries every reference image of the %s multi-reference sample',
+    (language) => {
+      const sample = buildVideoSample(language, VIDEO_CONTEXT, 'r2v')
+
+      expect(sample).toContain('reference-1.png')
+      expect(sample).toContain('reference-2.png')
+      expect(sample).toContain('reference-3.png')
+      expect(sample).toContain('r2v')
+    }
+  )
+
+  // The create call switches to multipart once a reference is attached; a
+  // leftover JSON content type would make the copied sample fail upstream.
+  it.each([
+    ['i2v', 'curl'],
+    ['i2v', 'python'],
+    ['i2v', 'typescript'],
+    ['i2v', 'javascript'],
+    ['r2v', 'curl'],
+    ['r2v', 'python'],
+    ['r2v', 'typescript'],
+    ['r2v', 'javascript'],
+  ] as const)(
+    'drops the JSON content type from the %s %s sample',
+    (mode, language) => {
+      const sample = buildVideoSample(language, VIDEO_CONTEXT, mode)
+
+      expect(sample).not.toContain('application/json')
+    }
+  )
+
+  it.each(LANGUAGES)(
+    'keeps create, poll, and download in the %s multi-reference sample',
+    (language) => {
+      const sample = buildVideoSample(language, VIDEO_CONTEXT, 'r2v')
+
+      expect(sample).toContain('/v1/videos')
+      expect(sample).toContain('completed')
+      expect(sample).toContain('/content')
+    }
+  )
+
+  // Reference order and count survive only when the part is repeated, so each
+  // dialect is checked against the mechanism that actually repeats it.
+  it('repeats the curl reference part once per image', () => {
+    const sample = buildVideoSample('curl', VIDEO_CONTEXT, 'r2v')
+
+    expect(sample.match(/-F "input_reference=@/g)).toHaveLength(3)
+  })
+
+  it('repeats the python reference tuple once per image', () => {
+    const sample = buildVideoSample('python', VIDEO_CONTEXT, 'r2v')
+
+    expect(sample.match(/\("input_reference", \(/g)).toHaveLength(3)
+  })
+
+  it.each(['typescript', 'javascript'] as const)(
+    'appends instead of overwriting the %s form reference part',
+    (language) => {
+      const sample = buildVideoSample(language, VIDEO_CONTEXT, 'r2v')
+
+      expect(sample).toContain(`form.append(`)
+      expect(sample).not.toContain(`form.set('input_reference'`)
+    }
+  )
 })

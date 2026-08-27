@@ -24,6 +24,9 @@ const MEDIA_IMAGE_MODEL_PATTERN =
   /^(?:gemini-3-pro-image|gemini-3\.1-flash-image)(?:-(?:2k|4k))?$/i
 const PROMPT_ONLY_IMAGE_MODELS = new Set(['gpt-image-2'])
 const REFERENCE_IMAGE_EDIT_MODELS = new Set(['gpt-image-2'])
+const REFERENCE_VIDEO_MODELS = new Set(['omni-flash'])
+/** Reference images a single multi-reference video request may carry. */
+export const MAX_VIDEO_REFERENCE_IMAGES = 7
 const PRO_IMAGE_ASPECT_RATIOS = [
   '1:1',
   '9:16',
@@ -61,6 +64,15 @@ export function supportsReferenceImageEditing(modelName: string): boolean {
     isGeminiImageModel(modelName) ||
     REFERENCE_IMAGE_EDIT_MODELS.has(modelName.trim().toLowerCase())
   )
+}
+
+/**
+ * Return whether the video SKU also accepts reference images, so its
+ * documentation covers image-to-video and multi-reference video next to the
+ * plain text-to-video request.
+ */
+export function supportsVideoReferenceModes(modelName: string): boolean {
+  return REFERENCE_VIDEO_MODELS.has(modelName.trim().toLowerCase())
 }
 
 /** Return the resolution tier encoded in one of this service's image SKUs. */
